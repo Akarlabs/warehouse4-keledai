@@ -13,6 +13,12 @@ Satu aplikasi, empat dashboard yang saling terhubung:
 > **Status:** `index.html` adalah **demo yang bisa dipakai mencoba alur** (data contoh, tersimpan di browser).
 > Database produksi (Supabase) sudah disiapkan dan diuji di folder `supabase/`. Lihat [Rencana ke produksi](#rencana-ke-produksi).
 
+## Tampilan
+
+Mengikuti design system **Winwin Berkah Amanah (WBA)**: logo Winwin asli (ikon di header, putih di tema gelap),
+warna `brand-green` / `royal-blue` / `azure`, huruf Montserrat (judul & angka) dan Figtree (isi).
+Layar loading memakai jenis *Denyut* dari WBA Design System dan hanya tampil saat pertama kali dibuka (belum ada data di perangkat).
+
 ## Alur yang tersambung
 
 ```
