@@ -1,0 +1,752 @@
+<title>Warehouse 4 Keledai</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&display=swap">
+<style>
+/* Layout: lantai gudang — header biru tinta, menu kiri (desktop) / tab atas (HP), satu aksi kuning "Scan" */
+:root{
+  --paper:#F2F5F7; --surface:#FFFFFF; --ink:#16324F; --ink-2:#4A6177; --line:#D5DEE6;
+  --tape:#F5C33B; --tape-ink:#2B2100; --ok:#1F7A4D; --ok-bg:#E3F3EA; --bad:#B83227; --bad-bg:#FBE7E4;
+  --warn:#9A6400; --warn-bg:#FDF1D8; --info:#1E5C96; --info-bg:#E2EEF9; --head:#16324F; --head-ink:#FFFFFF;
+  --f:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0E1822; --surface:#15222F; --ink:#E4ECF3; --ink-2:#9FB2C3; --line:#2A3B4C;
+  --tape:#F5C33B; --tape-ink:#2B2100; --ok:#5CC48E; --ok-bg:#12301F; --bad:#F07F72; --bad-bg:#3A1714;
+  --warn:#F0B85A; --warn-bg:#33260C; --info:#7DB6EA; --info-bg:#142B42; --head:#0A2238; --head-ink:#FFFFFF; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0E1822; --surface:#15222F; --ink:#E4ECF3; --ink-2:#9FB2C3; --line:#2A3B4C;
+  --tape:#F5C33B; --tape-ink:#2B2100; --ok:#5CC48E; --ok-bg:#12301F; --bad:#F07F72; --bad-bg:#3A1714;
+  --warn:#F0B85A; --warn-bg:#33260C; --info:#7DB6EA; --info-bg:#142B42; --head:#0A2238; --head-ink:#FFFFFF; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.5;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--head)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--tape);outline-offset:2px}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.2}
+h2{font-size:1.35rem;font-weight:750;font-stretch:85%}
+h3{font-size:1.05rem;font-weight:700}
+p{margin:0}
+.gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--head);color:var(--head-ink);border-bottom:4px solid var(--tape)}
+.top-in{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:10px}
+.brandmark{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.logo{width:34px;height:34px;border-radius:7px;background:var(--tape);color:var(--tape-ink);display:grid;place-items:center;font-weight:800;font-size:.9rem;flex:none}
+.brandmark b{font-weight:800;font-stretch:80%;font-size:1.1rem;letter-spacing:.01em;display:block;line-height:1.1}
+.brandmark small{opacity:.75;font-size:.75rem}
+.top label{font-size:.72rem;opacity:.8;display:block}
+.top select{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:7px;padding:5px 8px;min-width:0}
+.top select option{color:#111;background:#fff}
+.demo-pill{background:var(--tape);color:var(--tape-ink);font-size:.72rem;font-weight:700;padding:3px 8px;border-radius:99px}
+
+/* Shell */
+.shell{display:grid;grid-template-columns:1fr;gap:0;max-width:1240px;margin:0 auto}
+nav.menu{display:flex;gap:6px;overflow-x:auto;padding-block:10px;border-bottom:1px solid var(--line);background:var(--surface)}
+nav.menu button{flex:none;border:1px solid var(--line);background:transparent;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;color:var(--ink-2);white-space:nowrap}
+nav.menu button[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+nav.menu .grp{display:none}
+main{padding-block:18px 120px;min-width:0;display:grid;gap:18px;align-content:start}
+@media (min-width:900px){
+  .shell{grid-template-columns:230px minmax(0,1fr)}
+  nav.menu{flex-direction:column;overflow:visible;border-bottom:0;border-right:1px solid var(--line);min-height:calc(100vh - 70px);padding:18px 12px;position:sticky;top:70px;align-self:start;background:transparent}
+  nav.menu button{text-align:left;border:0;padding:8px 12px}
+  nav.menu .grp{display:block;font-size:.72rem;color:var(--ink-2);letter-spacing:.06em;text-transform:uppercase;padding:12px 12px 2px}
+  main{padding-left:28px;padding-right:max(28px,env(safe-area-inset-right,0px))}
+}
+
+/* Elements */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.row.between{justify-content:space-between}
+.muted{color:var(--ink-2)}
+.small{font-size:.82rem}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 14px;font-weight:650;cursor:pointer;min-height:42px}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn.tape{background:var(--tape);color:var(--tape-ink);border-color:var(--tape);font-weight:800}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.ghost{border-color:transparent;background:transparent;text-decoration:underline;padding-inline:4px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.field{display:grid;gap:4px;min-width:0}
+.field>span{font-size:.78rem;color:var(--ink-2);font-weight:600}
+.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:9px 10px;min-height:42px;width:100%}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.badge{display:inline-block;font-size:.74rem;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.b-ok{background:var(--ok-bg);color:var(--ok)}.b-bad{background:var(--bad-bg);color:var(--bad)}
+.b-warn{background:var(--warn-bg);color:var(--warn)}.b-info{background:var(--info-bg);color:var(--info)}
+.b-neu{background:var(--paper);color:var(--ink-2);border:1px solid var(--line)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th{text-align:left;font-weight:650;color:var(--ink-2);background:var(--paper);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right}
+.qty{font-weight:800;font-size:1.05rem}
+.code{font-weight:700;font-stretch:80%;letter-spacing:.02em}
+.empty{padding:22px;text-align:center;color:var(--ink-2);border:1px dashed var(--line);border-radius:10px}
+
+/* Tiles gudang */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:left;cursor:pointer;display:grid;gap:4px;min-height:96px}
+.tile:hover{border-color:var(--ink)}
+.tile b{font-size:1.05rem}
+.tile small{color:var(--ink-2)}
+.tile .count{justify-self:start}
+
+/* Alur langkah */
+.steps{display:grid;gap:8px;counter-reset:s;margin:0;padding:0;list-style:none}
+.steps li{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+.steps li::before{counter-increment:s;content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--tape);color:var(--tape-ink);display:grid;place-items:center;font-weight:800;font-size:.85rem}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.flow span{padding:4px 10px;border-radius:99px;border:1px solid var(--line);font-size:.8rem;font-weight:650;color:var(--ink-2)}
+.flow span.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.flow span.done{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+
+/* Stat */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat b{display:block;font-size:1.5rem;font-weight:800;font-stretch:85%}
+.stat span{color:var(--ink-2);font-size:.82rem}
+
+/* Scan */
+.scanfab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:1.05rem;padding:14px 22px;border-radius:99px}
+.sheet-bg{position:fixed;inset:0;background:rgba(5,15,25,.55);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:12px;max-height:88vh;overflow:auto}
+.viewfinder{height:120px;border-radius:12px;background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 7px);opacity:.18;position:relative}
+.vf-wrap{position:relative}
+.vf-wrap p{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-weight:650;font-size:.85rem;padding:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px dashed var(--ink-2);background:var(--paper);border-radius:8px;padding:6px 9px;cursor:pointer;font-size:.8rem;text-align:left}
+.chip b{display:block;font-stretch:80%}
+.chip.loc{border-style:solid;border-color:var(--tape)}
+
+/* Banner hasil scan: elemen yang paling penting untuk staf */
+.banner{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 58px);z-index:50;padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px));color:#fff;display:grid;gap:2px;text-align:center}
+.banner b{font-size:1.6rem;font-weight:800;font-stretch:80%;letter-spacing:.01em}
+.banner.ok{background:#1F7A4D}.banner.bad{background:#B83227}.banner.info{background:#1E5C96}
+@media (prefers-reduced-motion:no-preference){.banner{animation:drop .18s ease-out}}
+@keyframes drop{from{transform:translateY(-12px);opacity:.4}to{transform:none;opacity:1}}
+.progress{height:8px;border-radius:99px;background:var(--paper);border:1px solid var(--line);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--ok)}
+tr.done td{background:var(--ok-bg)}
+.note{border-left:4px solid var(--tape);padding:8px 12px;background:var(--paper);border-radius:0;font-size:.88rem}
+</style>
+
+<header class="top"><div class="top-in gutter">
+  <div class="brandmark"><div class="logo">4K</div><div><b>Warehouse Sistem 4 Keledai</b><small>Stok, gudang, B2B & marketplace dalam satu sistem</small></div></div>
+  <span class="demo-pill">DEMO · data contoh</span>
+  <div><label for="role">Masuk sebagai</label><select id="role">
+    <option value="owner">Owner / Admin</option><option value="supervisor">Supervisor / PIC gudang</option><option value="gudang">Petugas gudang</option>
+    <option value="sales">Sales</option><option value="finance">Finance</option></select></div>
+  <div><label for="whsel">Gudang</label><select id="whsel"></select></div>
+</div></header>
+<div class="shell">
+  <nav class="menu gutter" id="menu" aria-label="Menu utama"></nav>
+  <main class="gutter" id="view"></main>
+</div>
+<div id="overlay"></div>
+<div id="bannerbox" aria-live="assertive"></div>
+
+<script>
+/* ================= DATA CONTOH ================= */
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+const WH = {SBY:'Gudang Surabaya', BDG:'Gudang Bandung'};
+const LOCS = {SBY:[['TERIMA','penerimaan'],['A-01','rak'],['A-02','rak'],['B-01','rak'],['B-02','rak'],['KARANTINA','karantina']],
+              BDG:[['TERIMA','penerimaan'],['R-01','rak'],['R-02','rak']]};
+const BRANDS = {ZDO:'Zerodeo', DKM:'Depot Kimia'};
+/* Produk dari file master user. Zerodeo: nama & isi dari Deskripsi Produk (SKU, barcode, harga = contoh).
+   Depot Kimia: SKU & HPP dari Master HPP (efektif 16 Sep 2026); harga jual yang kosong di file = contoh. */
+const P = [
+ {sku:'ZDO-SPR-ZEN-60', bc:'8992001000017', name:'ZERODEO Deodorant Spray Zen Protect 60ml', brand:'ZDO', uom:'pcs', pack:'Body Spray', price:39000, cost:14000},
+ {sku:'ZDO-SPR-VTF-60', bc:'8992001000024', name:'ZERODEO Deodorant Spray Vital Fresh 60ml', brand:'ZDO', uom:'pcs', pack:'Body Spray', price:39000, cost:14000},
+ {sku:'ZDO-SPR-BRA-60', bc:'8992001000031', name:'ZERODEO Deodorant Spray Bright Aura For Woman 60ml', brand:'ZDO', uom:'pcs', pack:'Body Spray', price:39000, cost:14000},
+ {sku:'ZDO-RO-DAC-40', bc:'8992001000048', name:'ZERODEO Deodorant Roll On Daily Active 40ml', brand:'ZDO', uom:'pcs', pack:'Roll on', price:29000, cost:9500},
+ {sku:'ZDO-RO-MXF-40', bc:'8992001000055', name:'ZERODEO Deodorant Roll On Max Fresh 40ml', brand:'ZDO', uom:'pcs', pack:'Roll on', price:29000, cost:9500},
+ {sku:'ZDO-RO-CRG-40', bc:'8992001000062', name:'ZERODEO Deodorant Roll On Crystal Glow For Woman 40ml', brand:'ZDO', uom:'pcs', pack:'Roll on', price:29000, cost:9500},
+ {sku:'ZDO-BM-CHM-75', bc:'8992001000079', name:'ZERODEO Body Mist Chic Motion 75ml', brand:'ZDO', uom:'pcs', pack:'Body Mist', price:35000, cost:12500},
+ {sku:'ZDO-BM-BLC-75', bc:'8992001000086', name:'ZERODEO Body Mist Bloom Charge 75ml', brand:'ZDO', uom:'pcs', pack:'Body Mist', price:35000, cost:12500},
+ {sku:'WT-AQD-LQ-1L', bc:'8993001000016', name:'Aquadest 1 Liter', brand:'DKM', uom:'pcs', pack:'Botol', price:8800, cost:3733},
+ {sku:'WT-TCCA90-1KG', bc:'8993001000023', name:'Kaporit TCCA 90% 1 kg', brand:'DKM', uom:'pcs', pack:'Pouch', price:52000, cost:26273},
+ {sku:'WT-ALSU-1KG', bc:'8993001000030', name:'Aluminium Sulfat / Tawas Bubuk 1 kg', brand:'DKM', uom:'pcs', pack:'Pouch', price:13500, cost:6073},
+ {sku:'WT-PACMP30-1KG', bc:'8993001000047', name:'PAC Putih MP30 1 KG', brand:'DKM', uom:'pcs', pack:'Pouch', price:21000, cost:10473},
+ {sku:'WT-NAOH-LQ-1KG', bc:'8993001000054', name:'Soda Api Cair / NaOH Liquid 48% - 1 KG', brand:'DKM', uom:'pcs', pack:'Jirigen', price:28500, cost:13843},
+ {sku:'CLN-NAOH-FLK-1KG', bc:'8993001000061', name:'Soda Api Padat / NaOH Flake 1 KG', brand:'DKM', uom:'pcs', pack:'Pouch', price:29000, cost:14773},
+ {sku:'CHEM-H2SO4-1KG', bc:'8993001000078', name:'Asam Sulfat H2SO4 98% 1 KG', brand:'DKM', uom:'pcs', pack:'Jirigen', price:41500, cost:18343},
+ {sku:'WT-NACL-1KG', bc:'8993001000085', name:'Garam Kasar NaCl 1 KG', brand:'DKM', uom:'pcs', pack:'Pouch', price:10300, cost:3773},
+ {sku:'CHEM-NA2CO3-1KG', bc:'8993001000092', name:'Soda Ash Dense Na2CO3 1 KG', brand:'DKM', uom:'pcs', pack:'Pouch', price:13000, cost:5873},
+ {sku:'FG-CA-1KG', bc:'8993001000108', name:'Citric Acid Food Grade 1 KG', brand:'DKM', uom:'pcs', pack:'Pouch', price:38000, cost:19473},
+];
+let S; // state
+function seed(){
+  S = {
+    role:'owner', wh:'SBY', view:'home', seq:{IN:6,OUT:11,TRF:3,PND:2,OPN:4,SO:8,INV:5,ADJ:1},
+    batches:[
+      {id:1,sku:'ZDO-RO-MXF-40',no:'ZR2405',exp:'2026-12-20',cost:9500},
+      {id:2,sku:'ZDO-RO-MXF-40',no:'ZR2409',exp:'2029-09-30',cost:9500},
+      {id:3,sku:'ZDO-RO-DAC-40',no:'ZR2408',exp:'2029-08-31',cost:9500},
+      {id:4,sku:'ZDO-RO-CRG-40',no:'ZR2408G',exp:'2029-08-31',cost:9500},
+      {id:5,sku:'ZDO-SPR-ZEN-60',no:'ZS2407',exp:'2029-07-31',cost:14000},
+      {id:6,sku:'ZDO-SPR-VTF-60',no:'ZS2407V',exp:'2029-07-31',cost:14000},
+      {id:7,sku:'ZDO-SPR-BRA-60',no:'ZS2406',exp:'2029-06-30',cost:14000},
+      {id:8,sku:'ZDO-BM-CHM-75',no:'ZM2311',exp:'2026-09-30',cost:12500},
+      {id:9,sku:'ZDO-BM-CHM-75',no:'ZM2410',exp:'2029-10-31',cost:12500},
+      {id:10,sku:'ZDO-BM-BLC-75',no:'ZM2410B',exp:'2029-10-31',cost:12500},
+      {id:11,sku:'WT-AQD-LQ-1L',no:'AQ2609',exp:'2028-09-30',cost:3733},
+      {id:12,sku:'WT-TCCA90-1KG',no:'TC2603',exp:'2027-03-31',cost:23477},
+      {id:13,sku:'WT-TCCA90-1KG',no:'TC2608',exp:'2028-08-31',cost:26273},
+      {id:14,sku:'WT-ALSU-1KG',no:'AS2607',exp:'2029-07-31',cost:6073},
+      {id:15,sku:'WT-PACMP30-1KG',no:'PC2606',exp:'2028-06-30',cost:10473},
+      {id:16,sku:'WT-NAOH-LQ-1KG',no:'NL2608',exp:'2028-08-31',cost:13843},
+      {id:17,sku:'CLN-NAOH-FLK-1KG',no:'NF2605',exp:'2028-05-31',cost:14773},
+      {id:18,sku:'CHEM-H2SO4-1KG',no:'HS2609',exp:'2029-09-30',cost:18343},
+      {id:19,sku:'WT-NACL-1KG',no:'GR2609',exp:'2029-09-30',cost:3773},
+      {id:20,sku:'CHEM-NA2CO3-1KG',no:'SA2607',exp:'2028-07-31',cost:5873},
+      {id:21,sku:'FG-CA-1KG',no:'CA2512',exp:'2026-12-31',cost:16477},
+      {id:22,sku:'FG-CA-1KG',no:'CA2608',exp:'2028-08-31',cost:19473},
+    ],
+    bal:{}, moves:[], history:[],
+    inbound:null, picking:null, transfer:null, count:null, pendingCount:null,
+    /* Bundling dari Master HPP Depot Kimia */
+    mapping:{
+      'BDL-H2SO4-NACL-1KG':[{sku:'CHEM-H2SO4-1KG',mult:1},{sku:'WT-NACL-1KG',mult:1}],
+      'BDL-H2SO4-AQD-1L':[{sku:'CHEM-H2SO4-1KG',mult:1},{sku:'WT-AQD-LQ-1L',mult:1}],
+    },
+    orders:[], importedOnce:false, imported:{},
+    customers:[
+      {code:'CV-TIRTA',name:'CV Tirta Bening Abadi',limit:20000000,terms:30},
+      {code:'TK-AYU',name:'Toko Kosmetik Ayu (reseller Zerodeo)',limit:3000000,terms:14},
+    ],
+    sos:[], invoices:[
+      {no:'INV-2609-0004',cust:'TK-AYU',date:'2026-09-10',due:'2026-09-24',total:2450000,paid:0,status:'belum_lunas',so:'SO-2609-0006'}
+    ],
+    discrepancies:[], counts:{}, manualOut:[],
+    weekly:{SBY:{'A-01':{st:'cocok',by:'Mas Gudang',at:'Senin'},'TERIMA':{st:'cocok',by:'Mas Gudang',at:'Senin'}},BDG:{}},
+    inChecks:[
+      {no:'IN-2610-0005',wh:'SBY',date:'2026-10-20',partner:'PT Mitra Kemasan Nusantara',items:'Zerodeo roll on & spray · 240 pcs',checked:'Bu Supervisor · Selasa'},
+      {no:'IN-2610-0006',wh:'SBY',date:'2026-10-21',partner:'CV Kimia Raya',items:'Kaporit TCCA, PAC, Asam Sulfat · 190 pcs',checked:null},
+    ],
+    weekHist:[{w:isoWeek(TODAY)-3,n:5,val:-184500},{w:isoWeek(TODAY)-2,n:3,val:-62300},{w:isoWeek(TODAY)-1,n:1,val:-18343}]
+  };
+  const open = [[1,'SBY:A-01',36],[2,'SBY:A-01',120],[3,'SBY:A-01',90],[4,'SBY:A-02',60],[5,'SBY:A-02',48],[6,'SBY:A-02',48],[7,'SBY:A-02',30],
+    [8,'SBY:KARANTINA',8],[9,'SBY:A-02',40],[10,'SBY:A-02',40],[11,'SBY:B-01',100],[12,'SBY:B-02',30],[13,'SBY:B-02',80],[14,'SBY:B-02',60],
+    [15,'SBY:B-02',70],[16,'SBY:B-01',40],[17,'SBY:B-02',35],[18,'SBY:B-01',60],[19,'SBY:B-02',100],[20,'SBY:B-02',50],[21,'SBY:B-02',12],[22,'SBY:B-02',40],
+    [2,'BDG:R-01',60],[5,'BDG:R-01',24],[13,'BDG:R-02',30],[18,'BDG:R-02',20]];
+  open.forEach(([b,l,q])=>move(b,l,q,'masuk','IN-2610-0001','Saldo awal'));
+  S.sos.push({no:'SO-2610-0007',cust:'CV-TIRTA',wh:'SBY',lines:[{sku:'WT-TCCA90-1KG',qty:40,price:48000},{sku:'WT-PACMP30-1KG',qty:50,price:19500},{sku:'WT-ALSU-1KG',qty:60,price:12000}],tax:11,status:'draft'});
+}
+/* ================= HELPER ================= */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf = new Intl.NumberFormat('id-ID',{maximumFractionDigits:3});
+const q = n=>nf.format(n);
+const rp = n=>'Rp '+new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(Math.round(n));
+const prod = k=>P.find(p=>p.sku===k||p.bc===k||p.sku.toLowerCase()===String(k).toLowerCase());
+const batch = id=>S.batches.find(b=>b.id===id);
+const days = d=>Math.round((new Date(d+'T00:00:00')-TODAY)/864e5);
+const fdate = d=>d?new Date(d+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}):'–';
+const yymm = ()=>{const d=new Date();return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')};
+const docno = p=>`${p}-${yymm()}-${String(++S.seq[p]).padStart(4,'0')}`;
+const locsOf = wh=>LOCS[wh].map(([c,k])=>({id:wh+':'+c,code:c,kind:k}));
+function balOf(b,l){return S.bal[b+'|'+l]||0}
+function move(b,l,qty,type,doc,note){
+  const k=b+'|'+l; const nv=(S.bal[k]||0)+qty;
+  if(nv<0) throw new Error(`Stok tidak cukup: ${batch(b).sku} batch ${batch(b).no} di ${l.split(':')[1]}`);
+  S.bal[k]=nv;
+  S.moves.push({t:new Date(),wh:l.split(':')[0],loc:l.split(':')[1],sku:batch(b).sku,batch:batch(b).no,qty,type,doc,note,by:roleName()});
+}
+function roleName(){return {owner:'Pak Owner',supervisor:'Bu Supervisor',gudang:'Mas Gudang',sales:'Mbak Sales',finance:'Bu Finance'}[S.role]}
+/* HPP & nilai stok hanya untuk owner, supervisor/PIC gudang, dan finance */
+const seeCost=()=>['owner','supervisor','finance'].includes(S.role);
+const isLead=()=>['owner','supervisor'].includes(S.role);
+function expBadge(exp){ if(!exp) return ''; const d=days(exp);
+  if(d<0) return `<span class="badge b-bad">Kedaluwarsa</span>`;
+  if(d<=90) return `<span class="badge b-warn">${d} hari lagi</span>`; return `<span class="badge b-neu">${fdate(exp)}</span>`}
+function stockRows(wh){ const out=[];
+  for(const k in S.bal){ const qn=S.bal[k]; if(qn<=0) continue; const [b,l]=k.split('|'); if(wh&&!l.startsWith(wh+':')) continue;
+    const bt=batch(+b); out.push({b:+b,loc:l,wh:l.split(':')[0],code:l.split(':')[1],sku:bt.sku,no:bt.no,exp:bt.exp,cost:bt.cost,qty:qn}); }
+  return out.sort((a,b)=>a.sku.localeCompare(b.sku)||a.exp.localeCompare(b.exp));
+}
+function kindOf(loc){const [w,c]=loc.split(':');return (LOCS[w].find(x=>x[0]===c)||[])[1]}
+/* FEFO: expired terdekat dulu, lewati kedaluwarsa & karantina */
+function fefo(wh,sku,need){
+  const c=stockRows(wh).filter(r=>r.sku===sku&&days(r.exp)>=0&&kindOf(r.loc)!=='karantina').sort((a,b)=>a.exp.localeCompare(b.exp));
+  const picks=[]; let left=need;
+  for(const r of c){ if(left<=0) break; const take=Math.min(r.qty,left); picks.push({b:r.b,loc:r.loc,sku,qty:take,picked:0}); left-=take; }
+  return {picks,short:left};
+}
+/* ================= UMPAN BALIK SCAN ================= */
+let actx;
+function beep(ok){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const play=(f,t,d)=>{const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type=ok?'sine':'square';g.gain.setValueAtTime(.15,actx.currentTime+t);g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+t+d);o.connect(g).connect(actx.destination);o.start(actx.currentTime+t);o.stop(actx.currentTime+t+d+.02)};
+  if(ok) play(1320,0,.09); else {play(220,0,.16);play(180,.2,.22)} }catch(e){} try{navigator.vibrate&&navigator.vibrate(ok?40:[120,80,120])}catch(e){} }
+let bannerT;
+function banner(kind,title,detail){ beep(kind!=='bad'); clearTimeout(bannerT);
+  $('#bannerbox').innerHTML=`<div class="banner ${kind}" role="status"><b>${esc(title)}</b>${detail?`<span>${esc(detail)}</span>`:''}</div>`;
+  bannerT=setTimeout(()=>$('#bannerbox').innerHTML='',kind==='bad'?3600:2200); }
+
+/* ================= MENU & PERAN ================= */
+const MENU=[
+ ['Ringkasan',[['home','Beranda',['owner','supervisor','gudang','sales','finance']]]],
+ ['Gudang',[['gudang','Operasi gudang',['owner','supervisor','gudang']],['mingguan','Cek mingguan',['owner','supervisor','gudang']],['stok','Cek stok',['owner','supervisor','gudang','sales','finance']]]],
+ ['Penjualan',[['mp','Marketplace',['owner','sales']],['b2b','B2B & faktur',['owner','sales','finance']]]],
+ ['Laporan',[['selisih','Selisih stok',['owner','supervisor','finance']],['export','Export data',['owner','finance']]]],
+];
+const allowed=v=>MENU.some(([,items])=>items.some(([id,,r])=>id===v&&r.includes(S.role)));
+function renderMenu(){ $('#menu').innerHTML=MENU.map(([g,items])=>{ const vis=items.filter(i=>i[2].includes(S.role)); if(!vis.length) return '';
+  return `<div class="grp">${g}</div>`+vis.map(([id,label])=>`<button data-act="go" data-v="${id}" aria-current="${S.view===id||(S.view.startsWith(id+'/'))}">${label}</button>`).join('')}).join(''); }
+
+/* ================= HALAMAN ================= */
+const V={};
+V.home=()=>{
+  const st=stockRows(S.wh); const exp=st.filter(r=>days(r.exp)<0).length, near=st.filter(r=>days(r.exp)>=0&&days(r.exp)<=90).length;
+  const nNew=S.orders.filter(o=>o.status==='baru').length;
+  const piutang=S.invoices.filter(i=>i.status!=='lunas').reduce((a,i)=>a+i.total-i.paid,0);
+  const val=st.reduce((a,r)=>a+r.qty*r.cost,0), units=st.reduce((a,r)=>a+r.qty,0);
+  const wk=weekStatus(S.wh); const moPend=S.manualOut.filter(m=>m.status==='pending'&&m.wh===S.wh);
+  const todo=[];
+  if(['owner','supervisor','gudang'].includes(S.role)&&wk.left) todo.push(['mingguan',`Cek mingguan: ${wk.left} rak belum dihitung`,`Minggu ${wk.week} · tenggat ${wk.deadline}${wk.overdue?' · TERLAMBAT':''}`]);
+  if(isLead()&&wk.inPending) todo.push(['mingguan',`${wk.inPending} barang masuk minggu ini belum diverifikasi`,'Cocokkan fisik dengan surat jalan']);
+  if(isLead()&&moPend.length) todo.push(['gudang/keluar',`${moPend.length} barang keluar manual menunggu persetujuan`,moPend.map(m=>m.no).join(', ')]);
+  if(!S.importedOnce&&['owner','sales'].includes(S.role)) todo.push(['mp','Impor pesanan marketplace hari ini','Zerodeo (Shopee) dan Depot Kimia (Tokopedia) belum diimpor']);
+  if(nNew&&['owner','supervisor','gudang'].includes(S.role)) todo.push(['gudang/keluar',`${nNew} pesanan marketplace siap diambil`,'Buat daftar ambil (FEFO) lalu scan']);
+  if(S.pendingCount&&['owner','supervisor','gudang'].includes(S.role)) todo.push(['gudang/opname',`Opname ${S.pendingCount.no} menunggu persetujuan`,'Periksa selisih & alasannya']);
+  if(S.transfer&&S.transfer.status==='dikirim') todo.push(['gudang/transfer',`Transfer ${S.transfer.no} sedang di jalan`,`Terima di ${WH[S.transfer.to]}`]);
+  if(exp&&['owner','supervisor','gudang'].includes(S.role)) todo.push(['stok',`${exp} batch sudah kedaluwarsa`,'Pastikan ada di rak karantina']);
+  if(['owner','finance'].includes(S.role)) S.invoices.filter(i=>i.status!=='lunas'&&days(i.due)<0).forEach(i=>todo.push(['b2b',`Faktur ${i.no} lewat jatuh tempo`,`${custName(i.cust)} · sisa ${rp(i.total-i.paid)}`]));
+  return `<div class="row between"><h2>Selamat pagi, ${roleName()}</h2><span class="muted small">${WH[S.wh]}</span></div>
+  <div class="stats">
+    ${seeCost()?`<div class="stat"><span>Nilai stok ${S.wh} (HPP)</span><b>${rp(val)}</b></div>`:`<div class="stat"><span>Total barang di ${S.wh}</span><b>${q(units)} pcs</b></div>`}
+    <div class="stat"><span>Cek mingguan rak</span><b>${wk.done}/${wk.total}</b></div>
+    <div class="stat"><span>Pesanan marketplace baru</span><b>${nNew}</b></div>
+    <div class="stat"><span>Batch ≤ 90 hari expired</span><b>${near}</b></div>
+    ${['owner','finance'].includes(S.role)?`<div class="stat"><span>Piutang B2B</span><b>${rp(piutang)}</b></div>`:''}
+  </div>
+  <section class="panel"><h3>Perlu dikerjakan</h3>${todo.length?`<div class="tbl-wrap"><table><tbody>${todo.map(t=>`<tr><td><b>${esc(t[1])}</b><div class="muted small">${esc(t[2])}</div></td><td class="n"><button class="btn" data-act="go" data-v="${t[0]}">Buka</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Tidak ada pekerjaan tertunda.</div>'}</section>
+  <section class="panel"><h3>Coba alur lengkapnya di demo ini</h3>
+  <ol class="steps">
+   <li><div><b>Sales</b> impor file pesanan Zerodeo (Shopee) dan Depot Kimia (Tokopedia) di menu Marketplace. Impor ulang file yang sama untuk melihat pesanan tidak dobel.</div></li>
+   <li><div>Petakan SKU CHEM-H2SO4-5KG ke 5 × Asam Sulfat 1 KG. Paket bundling Depot Kimia (mis. Asam Sulfat + NaCl) otomatis dipecah jadi produk satuan.</div></li>
+   <li><div><b>Petugas gudang</b> buat daftar ambil di Operasi gudang → Barang keluar. Sistem memilih batch FEFO. Scan barangnya, lalu coba scan barang yang salah.</div></li>
+   <li><div><b>Petugas gudang</b> buka Cek mingguan, hitung rak yang belum dicek, lalu ajukan. <b>Supervisor</b> menyetujui selisihnya. Perhatikan: petugas tidak melihat HPP atau nilai stok sama sekali.</div></li>
+   <li><div><b>Petugas gudang</b> keluarkan barang manual (mis. body mist kedaluwarsa di karantina untuk dimusnahkan). Stok baru berkurang setelah <b>Supervisor</b> menyetujui.</div></li>
+   <li><div><b>Sales</b> konfirmasi SO B2B, gudang kirim, <b>Finance</b> buat faktur & catat pembayaran.</div></li>
+   <li><div><b>Finance</b> lihat Selisih stok dan Export data untuk pembukuan.</div></li>
+  </ol>
+  <p class="muted small">Ganti peran dan gudang di bagian atas. Data contoh kembali ke awal kalau halaman dimuat ulang.</p></section>`;
+};
+const custName=c=>(S.customers.find(x=>x.code===c)||{}).name||c;
+
+/* ---------- Gudang ---------- */
+V.gudang=()=>`<div class="row between"><h2>Operasi gudang · ${WH[S.wh]}</h2></div>
+ <div class="tiles">
+  ${tile('gudang/masuk','Barang masuk','Terima dari supplier, retur, saldo awal',S.inbound?.lines.length?`${S.inbound.lines.length} baris draft`:'')}
+  ${tile('gudang/keluar','Barang keluar','Ambil pesanan (FEFO + scan) atau keluar manual',S.orders.filter(o=>o.status==='baru').length?`${S.orders.filter(o=>o.status==='baru').length} pesanan baru`:'')}
+  ${tile('gudang/transfer','Transfer gudang','Kirim & terima antar kota',S.transfer?(S.transfer.status==='dikirim'?'Sedang di jalan':'Draft'):'')}
+  ${tile('gudang/pindah','Pindah rak','Rapikan dari area terima ke rak','')}
+  ${tile('gudang/opname','Stock opname','Hitung rak, selisih wajib alasan',S.pendingCount?'Menunggu persetujuan':'')}
+  ${tile('mingguan','Cek mingguan','Semua rak & barang masuk minggu ini',weekStatus(S.wh).left?`${weekStatus(S.wh).left} rak belum`:'Selesai')}
+  ${tile('stok','Cek stok','Scan barang, lihat batch & rak','')}
+ </div>
+ <p class="note">Setiap barang bergerak lewat scan atau input manual yang tercatat. Stok tidak bisa diedit langsung, jadi selisih selalu bisa dilacak asal-usulnya.</p>`;
+/* ---------- Cek mingguan ---------- */
+function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+function weekStatus(wh){ const racks=locsOf(wh).map(l=>l.code); const st=S.weekly[wh]||{};
+  const sat=new Date(TODAY); sat.setDate(sat.getDate()+((6-sat.getDay()+7)%7));
+  const done=racks.filter(r=>st[r]&&st[r].st!=='menunggu').length; const ins=S.inChecks.filter(i=>i.wh===wh);
+  return {week:isoWeek(TODAY),racks,st,total:racks.length,done,left:racks.length-done,deadline:sat.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'}),
+          overdue:TODAY.getDay()===0, ins, inPending:ins.filter(i=>!i.checked).length}; }
+V.mingguan=()=>{ const w=weekStatus(S.wh); const pct=w.total?w.done/w.total*100:0;
+  return `<div class="row between"><h2>Cek mingguan · Minggu ${w.week}</h2><span class="badge ${w.left?'b-warn':'b-ok'}">${w.left?`tenggat ${w.deadline}`:'Minggu ini selesai'}</span></div>
+  <p class="muted">Setiap minggu semua rak di ${WH[S.wh]} dihitung buta (petugas tidak melihat angka sistem), lalu dicocokkan. Selisih ketahuan di minggu yang sama, jadi tidak menggulung sampai akhir bulan.</p>
+  <section class="panel"><div class="row between"><h3>Hitung rak</h3><b>${w.done} dari ${w.total} rak</b></div>
+  <div class="progress"><i style="width:${pct}%"></i></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Rak</th><th>Status</th><th>Dicek oleh</th><th></th></tr></thead><tbody>
+  ${w.racks.map(r=>{const x=w.st[r]; const badge=!x?'<span class="badge b-neu">Belum dihitung</span>':x.st==='cocok'?'<span class="badge b-ok">Cocok</span>':x.st==='selisih'?`<span class="badge b-warn">Selisih ${x.qty>0?'+':''}${q(x.qty)} pcs, disetujui</span>`:'<span class="badge b-info">Menunggu persetujuan</span>';
+    return `<tr><td class="code qty">${r}</td><td>${badge}</td><td class="small">${x?esc(x.by)+' · '+esc(x.at):'–'}</td><td class="n">${!x&&['owner','supervisor','gudang'].includes(S.role)?`<button class="btn" data-act="wk-count" data-r="${r}">Hitung</button>`:''}</td></tr>`}).join('')}
+  </tbody></table></div></section>
+  <section class="panel"><div class="row between"><h3>Verifikasi barang masuk minggu ini</h3><span class="muted small">${w.ins.length-w.inPending} dari ${w.ins.length} terverifikasi</span></div>
+  <p class="muted small">Supervisor mencocokkan fisik barang dengan surat jalan supplier dan dokumen barang masuk di sistem.</p>
+  ${w.ins.length?`<div class="tbl-wrap"><table><thead><tr><th>Dokumen</th><th>Tanggal</th><th>Pengirim</th><th>Isi</th><th>Status</th></tr></thead><tbody>
+  ${w.ins.map(i=>`<tr><td class="code">${i.no}</td><td>${fdate(i.date)}</td><td>${esc(i.partner)}</td><td class="small">${esc(i.items)}</td><td>${i.checked?`<span class="badge b-ok">Cocok</span><div class="muted small">${esc(i.checked)}</div>`:isLead()?`<button class="btn" data-act="wk-in" data-k="${S.inChecks.indexOf(i)}">Tandai cocok</button>`:'<span class="badge b-warn">Menunggu supervisor</span>'}</td></tr>`).join('')}
+  </tbody></table></div>`:'<div class="empty">Belum ada barang masuk minggu ini.</div>'}</section>
+  ${seeCost()?`<section class="panel"><h3>Riwayat selisih per minggu</h3><p class="muted small">Selisih yang mengecil tiap minggu tandanya disiplin scan berjalan.</p>
+  <div class="tbl-wrap"><table><thead><tr><th>Minggu</th><th class="n">Baris selisih</th><th class="n">Nilai selisih (HPP)</th></tr></thead><tbody>
+  ${S.weekHist.map(h=>`<tr><td>Minggu ${h.w}</td><td class="n">${h.n}</td><td class="n" style="color:${h.val<0?'var(--bad)':'inherit'}">${rp(h.val)}</td></tr>`).join('')}
+  <tr><td><b>Minggu ${w.week} (berjalan)</b></td><td class="n">${S.discrepancies.filter(d=>d.src==='opname'&&d.wh===S.wh).length}</td><td class="n">${rp(S.discrepancies.filter(d=>d.src==='opname'&&d.wh===S.wh).reduce((a,d)=>a+d.val,0))}</td></tr>
+  </tbody></table></div></section>`:''}`;};
+const tile=(v,t,d,c)=>`<button class="tile" data-act="go" data-v="${v}"><b>${t}</b><small>${d}</small>${c?`<span class="badge b-info count">${c}</span>`:''}</button>`;
+
+/* Barang masuk */
+V['gudang/masuk']=()=>{
+  if(!S.inbound) S.inbound={no:docno('IN'),source:'supplier',partner:'PT Mitra Kemasan Nusantara',ref:'PO-2610-031',loc:S.wh+':TERIMA',lines:[],pending:null};
+  const d=S.inbound;
+  return `${back('gudang')}<div class="row between"><h2>Barang masuk ${d.no}</h2><span class="badge b-neu">Draft</span></div>
+  <section class="panel"><div class="grid2">
+   <label class="field"><span>Sumber</span><select id="in-src">${[['supplier','Dari supplier'],['retur_marketplace','Retur marketplace'],['saldo_awal','Saldo awal']].map(([v,l])=>`<option value="${v}" ${d.source===v?'selected':''}>${l}</option>`).join('')}</select></label>
+   <label class="field"><span>Supplier / pengirim</span><input id="in-partner" value="${esc(d.partner)}"></label>
+   <label class="field"><span>No. PO / surat jalan</span><input id="in-ref" value="${esc(d.ref)}"></label>
+   <label class="field"><span>Taruh di lokasi</span><select id="in-loc">${locsOf(S.wh).map(l=>`<option value="${l.id}" ${d.loc===l.id?'selected':''}>${l.code}</option>`).join('')}</select></label>
+  </div></section>
+  ${d.pending?pendingForm(d.pending):''}
+  <section class="panel"><div class="row between"><h3>Barang diterima</h3><span class="muted small">${d.lines.length} baris</span></div>
+  ${d.lines.length?`<div class="tbl-wrap"><table><thead><tr><th>Produk</th><th>Batch</th><th>Expired</th><th>Lokasi</th><th class="n">Qty</th><th></th></tr></thead><tbody>
+   ${d.lines.map((l,i)=>`<tr><td><b>${esc(prod(l.sku).name)}</b><div class="muted small code">${l.sku}</div></td><td class="code">${l.no}</td><td>${fdate(l.exp)}</td><td class="code">${l.loc.split(':')[1]}</td><td class="n qty">${q(l.qty)}</td><td><button class="btn ghost" data-act="in-del" data-i="${i}">Hapus</button></td></tr>`).join('')}
+  </tbody></table></div>`:`<div class="empty">Tekan <b>Scan</b> lalu arahkan kamera ke barcode di kardus. Bisa juga ketik barcode/SKU.</div>`}
+  <div class="row"><button class="btn primary" data-act="in-post" ${d.lines.length?'':'disabled'}>Posting barang masuk</button><button class="btn danger" data-act="in-cancel">Batalkan draft</button></div>
+  <p class="muted small">Setelah diposting, stok bertambah dan dokumen terkunci. Kesalahan setelahnya dikoreksi lewat penyesuaian yang perlu persetujuan.</p></section>
+  ${scanFab('in')}`;
+};
+function pendingForm(p){ const pr=prod(p.sku); return `<section class="panel" style="border:2px solid var(--tape)"><h3>${esc(pr.name)}</h3>
+  <p class="muted small">Produk ini dilacak per batch. Isi dari label kemasan.</p>
+  <div class="grid2"><label class="field"><span>Nomor batch</span><input id="pb-no" value="${esc(p.no)}"></label>
+  <label class="field"><span>Tanggal expired</span><input id="pb-exp" type="date" value="${p.exp}"></label>
+  <label class="field"><span>Jumlah (${pr.uom})</span><input id="pb-qty" type="number" min="1" value="${p.qty}"></label></div>
+  <div class="row"><button class="btn primary" data-act="in-addpending">Tambahkan</button><button class="btn ghost" data-act="in-droppending">Batal</button></div></section>`; }
+
+/* Barang keluar (marketplace) */
+V['gudang/keluar']=()=>{
+  if(S.picking) return pickingView();
+  const ready=S.orders.filter(o=>o.status==='baru');
+  return `${back('gudang')}<h2>Barang keluar</h2>
+  <section class="panel"><div class="row between"><h3>Pesanan marketplace siap diambil</h3><span class="muted small">${WH[S.wh]}</span></div>
+  ${S.orders.length?`<div class="tbl-wrap"><table><thead><tr><th></th><th>No. pesanan</th><th>Pembeli</th><th>Barang</th><th>Status</th></tr></thead><tbody>
+  ${S.orders.map(o=>{const um=unmapped(o); return `<tr><td>${o.status==='baru'&&!um.length?`<input type="checkbox" class="ordsel" value="${o.id}" checked aria-label="Pilih ${o.id}">`:''}</td><td class="code">${o.id}</td><td>${esc(o.buyer)}</td><td class="small">${o.lines.map(l=>`${esc(l.sku)} × ${l.qty}`).join('<br>')}</td><td>${um.length?`<span class="badge b-bad">SKU belum dipetakan</span>`:stBadge(o.status)}</td></tr>`}).join('')}
+  </tbody></table></div>
+  <div class="row"><button class="btn primary" data-act="pick-create" ${ready.some(o=>!unmapped(o).length)?'':'disabled'}>Buat daftar ambil (FEFO)</button></div>`
+  :`<div class="empty">Belum ada pesanan. Sales perlu impor file pesanan di menu Marketplace dulu.${S.role==='owner'?' <button class="btn" data-act="go" data-v="mp">Ke Marketplace</button>':''}</div>`}
+  </section>${manualOutPanel()}`;
+};
+const MO_PURPOSE={sampel:'Sampel / promosi',rusak_musnah:'Rusak / kedaluwarsa (dimusnahkan)',internal:'Pemakaian internal',offline:'Jual langsung / offline'};
+function manualOutPanel(){ const sku=S.moSku||'ZDO-BM-CHM-75'; const rows=stockRows(S.wh).filter(r=>r.sku===sku);
+  const list=S.manualOut.filter(m=>m.wh===S.wh);
+  return `<section class="panel"><h3>Keluar manual (di luar pesanan)</h3>
+  <p class="muted small">Untuk sampel, barang rusak/kedaluwarsa, pemakaian internal, atau jual langsung. Tujuan & keterangan wajib. ${S.role==='gudang'?'Stok baru berkurang setelah disetujui supervisor.':'Karena Anda supervisor/owner, stok langsung berkurang dan tercatat atas nama Anda.'}</p>
+  <div class="grid2">
+   <label class="field"><span>Tujuan</span><select id="mo-purpose">${Object.entries(MO_PURPOSE).map(([k,v])=>`<option value="${k}" ${k===(S.moPurpose||'rusak_musnah')?'selected':''}>${v}</option>`).join('')}</select></label>
+   <label class="field"><span>Produk</span><select id="mo-sku">${P.map(p=>`<option value="${p.sku}" ${p.sku===sku?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
+   <label class="field"><span>Batch & rak</span><select id="mo-batch"><option value="fefo">Otomatis (expired terdekat)</option>${rows.map(r=>`<option value="${r.b}|${r.loc}" ${kindOf(r.loc)==='karantina'?'selected':''}>${r.no} · rak ${r.code} · ${q(r.qty)} pcs${days(r.exp)<0?' · KEDALUWARSA':''}</option>`).join('')}</select></label>
+   <label class="field"><span>Jumlah</span><input id="mo-qty" type="number" min="1" value="8"></label>
+  </div>
+  <label class="field"><span>Keterangan (wajib)</span><input id="mo-note" value="Body mist batch ZM2311 lewat expired, dimusnahkan dengan berita acara"></label>
+  <div class="row"><button class="btn primary" data-act="mo-submit">${S.role==='gudang'?'Ajukan barang keluar':'Keluarkan barang'}</button></div>
+  ${list.length?`<div class="tbl-wrap"><table><thead><tr><th>Dokumen</th><th>Tujuan</th><th>Barang</th><th class="n">Qty</th><th>Diajukan</th><th>Status</th></tr></thead><tbody>
+  ${list.map(m=>`<tr><td class="code">${m.no}</td><td class="small">${MO_PURPOSE[m.purpose]}<div class="muted">${esc(m.note)}</div></td><td>${esc(prod(m.sku).name)}<div class="muted small code">${m.b?batch(m.b).no+' · '+m.loc.split(':')[1]:'FEFO'}</div></td><td class="n qty">${q(m.qty)}</td><td class="small">${esc(m.by)}</td>
+   <td>${m.status==='pending'?(isLead()?`<div class="row"><button class="btn primary" data-act="mo-approve" data-no="${m.no}">Setujui</button><button class="btn danger" data-act="mo-reject" data-no="${m.no}">Tolak</button></div>`:'<span class="badge b-warn">Menunggu supervisor</span>'):m.status==='posted'?`<span class="badge b-ok">Keluar</span><div class="muted small">${esc(m.approver)}</div>`:'<span class="badge b-bad">Ditolak</span>'}</td></tr>`).join('')}
+  </tbody></table></div>`:''}</section>`;
+}
+function pickingView(){ const pk=S.picking; const tot=pk.picks.reduce((a,p)=>a+p.qty,0), got=pk.picks.reduce((a,p)=>a+p.picked,0);
+  const byLoc=[...pk.picks].sort((a,b)=>a.loc.localeCompare(b.loc));
+  return `${back('gudang/keluar','Kembali')}<div class="row between"><h2>Daftar ambil ${pk.no}</h2><span class="badge b-info">${pk.orders.length} pesanan</span></div>
+  <section class="panel"><div class="row between"><b>${q(got)} dari ${q(tot)} barang ter-scan</b><label class="row small"><input type="checkbox" id="pk-manual" ${pk.manual?'checked':''} data-act="pk-manual"> Mode manual (tanpa scan)</label></div>
+  <div class="progress"><i style="width:${tot?got/tot*100:0}%"></i></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Rak</th><th>Produk</th><th>Batch</th><th>Expired</th><th class="n">Ambil</th><th class="n">Ter-scan</th></tr></thead><tbody>
+   ${byLoc.map(p=>{const bt=batch(p.b);return `<tr class="${p.picked>=p.qty?'done':''}"><td class="code qty">${p.loc.split(':')[1]}</td><td><b>${esc(prod(p.sku).name)}</b></td><td class="code">${bt.no}</td><td>${expBadge(bt.exp)}</td><td class="n qty">${q(p.qty)}</td><td class="n qty">${q(p.picked)}</td></tr>`}).join('')}
+  </tbody></table></div>
+  <p class="muted small">Batch dengan expired terdekat dipilih otomatis. Batch kedaluwarsa dan rak karantina tidak ikut dialokasikan.</p>
+  <div class="row"><button class="btn primary" data-act="pick-post">Selesai & kurangi stok</button><button class="btn danger" data-act="pick-cancel">Batalkan daftar ambil</button></div></section>
+  ${scanFab('pick')}`;
+}
+const unmapped=o=>o.lines.filter(l=>!S.mapping[l.sku]&&!prod(l.sku)).map(l=>l.sku);
+const stBadge=s=>{const m={baru:['Baru','b-info'],diproses:['Diproses','b-info'],dikirim:['Dikirim','b-ok'],batal:['Batal','b-bad'],draft:['Draft','b-neu'],confirmed:['Dikonfirmasi','b-info'],lunas:['Lunas','b-ok'],belum_lunas:['Belum lunas','b-warn'],sebagian:['Bayar sebagian','b-warn'],faktur:['Difakturkan','b-ok']}[s]||[s,'b-neu'];return `<span class="badge ${m[1]}">${m[0]}</span>`};
+
+/* Transfer */
+V['gudang/transfer']=()=>{ const t=S.transfer;
+  if(!t) return `${back('gudang')}<h2>Transfer gudang</h2><section class="panel"><p>Kirim stok dari <b>${WH[S.wh]}</b> ke gudang lain. Stok berkurang saat dikirim dan bertambah setelah gudang tujuan menerima.</p>
+   <div class="grid2"><label class="field"><span>Ke gudang</span><select id="tr-to">${Object.keys(WH).filter(w=>w!==S.wh).map(w=>`<option value="${w}">${WH[w]}</option>`).join('')}</select></label>
+   <label class="field"><span>Produk</span><select id="tr-sku">${P.map(p=>`<option value="${p.sku}">${esc(p.name)}</option>`).join('')}</select></label>
+   <label class="field"><span>Jumlah</span><input id="tr-qty" type="number" min="1" value="10"></label></div>
+   <div class="row"><button class="btn primary" data-act="tr-create">Buat & kirim transfer</button></div></section>`;
+  const lines=`<div class="tbl-wrap"><table><thead><tr><th>Produk</th><th>Batch</th><th>Dari rak</th><th class="n">Dikirim</th>${t.status==='dikirim'?'<th class="n">Diterima</th>':''}</tr></thead><tbody>${t.lines.map((l,i)=>`<tr><td>${esc(prod(l.sku).name)}</td><td class="code">${batch(l.b).no}</td><td class="code">${l.loc.split(':')[1]}</td><td class="n qty">${q(l.qty)}</td>${t.status==='dikirim'?`<td class="n"><input type="number" min="0" max="${l.qty}" value="${l.qty}" id="tr-rcv-${i}" style="width:90px" class="field" aria-label="Diterima"></td>`:''}</tr>`).join('')}</tbody></table></div>`;
+  if(t.status==='dikirim'){ const here=S.wh===t.to;
+    return `${back('gudang')}<div class="row between"><h2>Transfer ${t.no}</h2>${stBadge('baru').replace('Baru','Di jalan')}</div>
+    <section class="panel"><p>${WH[t.from]} → <b>${WH[t.to]}</b></p>${lines}
+    ${here?`<div class="grid2"><label class="field"><span>Taruh di rak</span><select id="tr-loc">${locsOf(t.to).map(l=>`<option value="${l.id}">${l.code}</option>`).join('')}</select></label>
+     <label class="field"><span>Keterangan selisih (wajib bila kurang)</span><input id="tr-note" placeholder="mis. 2 pcs pecah di ekspedisi"></label></div>
+     <div class="row"><button class="btn primary" data-act="tr-receive">Selesaikan penerimaan</button></div>
+     <p class="muted small">Coba ubah jumlah diterima jadi lebih kecil: sistem meminta keterangan dan selisihnya masuk laporan.</p>`
+    :`<div class="note">Penerimaan dilakukan petugas di ${WH[t.to]}. Ganti gudang di bagian atas ke <b>${WH[t.to]}</b> untuk mencoba.</div>`}</section>`;}
+  return '';
+};
+
+/* Pindah rak */
+V['gudang/pindah']=()=>{ const rows=stockRows(S.wh);
+  return `${back('gudang')}<h2>Pindah rak</h2><section class="panel">
+  <p class="muted">Scan rak asal, scan barang, isi jumlah, lalu scan rak tujuan. Di demo ini cukup pilih dari daftar.</p>
+  <div class="grid2"><label class="field"><span>Barang & batch di rak</span><select id="mv-src">${rows.map(r=>`<option value="${r.b}|${r.loc}">${r.code} · ${esc(prod(r.sku).name)} · ${r.no} (${q(r.qty)})</option>`).join('')}</select></label>
+  <label class="field"><span>Jumlah</span><input id="mv-qty" type="number" min="1" value="5"></label>
+  <label class="field"><span>Ke rak</span><select id="mv-to">${locsOf(S.wh).map(l=>`<option value="${l.id}">${l.code}</option>`).join('')}</select></label></div>
+  <div class="row"><button class="btn primary" data-act="mv-go">Pindahkan</button></div></section>`;};
+
+/* Opname */
+V['gudang/opname']=()=>{
+  if(S.pendingCount) return countReview();
+  if(!S.count) return `${back('gudang')}<h2>Stock opname</h2><section class="panel"><p>Hitung satu rak per hari (cycle count), jangan tunggu akhir tahun. Selama hitung, jumlah di sistem tidak ditampilkan supaya hitungan jujur.</p>
+   <div class="grid2"><label class="field"><span>Rak yang dihitung</span><select id="op-loc">${locsOf(S.wh).map(l=>`<option value="${l.id}">${l.code}</option>`).join('')}</select></label></div>
+   <div class="row"><button class="btn primary" data-act="op-start">Mulai hitung</button></div></section>`;
+  const c=S.count;
+  return `${back('gudang')}<div class="row between"><h2>Opname ${c.no} · rak ${c.loc.split(':')[1]}</h2><span class="badge b-info">Sedang dihitung</span></div>
+  <section class="panel"><p class="muted small">Scan setiap barang di rak ini (1 scan = 1 pcs) atau ketik jumlahnya.</p>
+  ${c.lines.length?`<div class="tbl-wrap"><table><thead><tr><th>Produk</th><th>Batch</th><th class="n">Dihitung</th></tr></thead><tbody>${c.lines.map((l,i)=>`<tr><td>${esc(prod(l.sku).name)}</td><td class="code">${batch(l.b).no}</td><td class="n"><input type="number" min="0" value="${l.qty}" data-act="op-set" data-i="${i}" style="width:90px" aria-label="Jumlah"></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada barang dihitung.</div>'}
+  <div class="row"><button class="btn primary" data-act="op-submit">Ajukan hasil hitung</button><button class="btn danger" data-act="op-cancel">Batalkan</button></div>
+  <p class="muted small">Barang yang tercatat di sistem tapi tidak di-scan otomatis dianggap 0 saat diajukan.</p></section>${scanFab('count')}`;
+};
+function countReview(){ const c=S.pendingCount; const isApprover=isLead();
+  return `${back('gudang')}<div class="row between"><h2>Opname ${c.no} · rak ${c.loc.split(':')[1]}</h2><span class="badge b-warn">Menunggu persetujuan</span></div>
+  <section class="panel"><div class="tbl-wrap"><table><thead><tr><th>Produk</th><th>Batch</th><th class="n">Sistem</th><th class="n">Fisik</th><th class="n">Selisih</th><th>Alasan</th></tr></thead><tbody>
+  ${c.lines.map((l,i)=>{const d=l.qty-l.sys;return `<tr><td>${esc(prod(l.sku).name)}</td><td class="code">${batch(l.b).no}</td><td class="n">${q(l.sys)}</td><td class="n">${q(l.qty)}</td><td class="n qty" style="color:${d<0?'var(--bad)':d>0?'var(--ok)':'inherit'}">${d>0?'+':''}${q(d)}</td><td>${d?`<select id="op-r-${i}" aria-label="Alasan"><option value="">— pilih —</option>${['hilang','rusak','salah_input','ditemukan'].map(r=>`<option ${l.reason===r?'selected':''}>${r}</option>`).join('')}</select>`:'<span class="muted small">cocok</span>'}</td></tr>`}).join('')}
+  </tbody></table></div>
+  ${isApprover?`<div class="row"><button class="btn primary" data-act="op-approve">Setujui & sesuaikan stok</button><button class="btn" data-act="op-reopen">Minta hitung ulang</button></div>`
+  :`<div class="note">Isi alasan untuk tiap selisih. Persetujuan dilakukan Supervisor/PIC gudang (bukan yang menghitung). Ganti peran ke <b>Supervisor / PIC gudang</b> di atas untuk menyetujui.</div><div class="row"><button class="btn" data-act="op-savereason">Simpan alasan</button></div>`}
+  </section>`;}
+
+/* ---------- Stok ---------- */
+V.stok=()=>{ const rows=stockRows(S.wh); const f=(S.stokQ||'').toLowerCase();
+  const vis=rows.filter(r=>!f||r.sku.toLowerCase().includes(f)||prod(r.sku).name.toLowerCase().includes(f)||prod(r.sku).bc.includes(f));
+  const ledger=S.moves.filter(m=>m.wh===S.wh&&(!f||m.sku.toLowerCase().includes(f)||prod(m.sku).name.toLowerCase().includes(f))).slice(-12).reverse();
+  return `<div class="row between"><h2>Stok · ${WH[S.wh]}</h2><span class="muted small">${seeCost()?'Nilai (HPP) '+rp(rows.reduce((a,r)=>a+r.qty*r.cost,0)):q(rows.reduce((a,r)=>a+r.qty,0))+' pcs'}</span></div>
+  <label class="field"><span>Cari / scan barcode</span><input id="stok-q" value="${esc(S.stokQ||'')}" placeholder="mis. roll on, kaporit, atau 8992001000055"></label>
+  <section class="panel"><h3>Per batch & rak</h3><div class="tbl-wrap"><table><thead><tr><th>Produk</th><th>Brand</th><th>Rak</th><th>Batch</th><th>Expired</th><th class="n">Qty</th>${seeCost()?'<th class="n">Nilai HPP</th>':''}</tr></thead><tbody>
+  ${vis.map(r=>`<tr><td><b>${esc(prod(r.sku).name)}</b><div class="muted small code">${r.sku}</div></td><td class="small">${BRANDS[prod(r.sku).brand]}</td><td class="code">${r.code}${kindOf(r.loc)==='karantina'?' <span class="badge b-bad">karantina</span>':''}</td><td class="code">${r.no}</td><td>${expBadge(r.exp)}</td><td class="n qty">${q(r.qty)}</td>${seeCost()?`<td class="n">${rp(r.qty*r.cost)}</td>`:''}</tr>`).join('')||'<tr><td colspan="7"><div class="empty">Tidak ada stok yang cocok.</div></td></tr>'}
+  </tbody></table></div></section>
+  <section class="panel"><h3>Kartu stok (riwayat terbaru)</h3><p class="muted small">Setiap perubahan tercatat permanen: siapa, kapan, dokumen apa. Tidak bisa diedit atau dihapus.</p>
+  <div class="tbl-wrap"><table><thead><tr><th>Waktu</th><th>Dokumen</th><th>Jenis</th><th>Produk</th><th>Batch</th><th>Rak</th><th class="n">Qty</th><th>Oleh</th></tr></thead><tbody>
+  ${ledger.map(m=>`<tr><td class="small">${m.t.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</td><td class="code">${m.doc}</td><td class="small">${m.type}</td><td class="code">${m.sku}</td><td class="code">${m.batch}</td><td class="code">${m.loc}</td><td class="n qty" style="color:${m.qty<0?'var(--bad)':'var(--ok)'}">${m.qty>0?'+':''}${q(m.qty)}</td><td class="small">${m.by}</td></tr>`).join('')}
+  </tbody></table></div></section>`;};
+
+/* ---------- Marketplace ---------- */
+const STORES={
+ zdo:{name:'Zerodeo Official',channel:'Shopee',file:'shopee_zerodeo_22-10-2026.xlsx',
+  head:['No. Pesanan','Status Pesanan','Username (Pembeli)','Nomor Referensi SKU','Nama Produk','Jumlah','Harga Setelah Diskon'],
+  rows:[
+   ['2610220ZA1','Perlu Dikirim','nadia.k','ZDO-RO-MXF-40','ZERODEO Roll On Max Fresh 40ml',2,29000],
+   ['2610220ZB4','Perlu Dikirim','rina_fit','ZDO-SPR-ZEN-60','ZERODEO Spray Zen Protect 60ml',1,39000],
+   ['2610220ZB4','Perlu Dikirim','rina_fit','ZDO-BM-BLC-75','ZERODEO Body Mist Bloom Charge 75ml',1,35000],
+   ['2610220ZC2','Batal','sari.ws','ZDO-RO-CRG-40','ZERODEO Roll On Crystal Glow For Woman 40ml',2,29000],
+   ['2610220ZD8','Perlu Dikirim','maya_ok','ZDO-BM-CHM-75','ZERODEO Body Mist Chic Motion 75ml',3,35000],
+  ]},
+ dkm:{name:'Depot Kimia',channel:'Tokopedia',file:'tokopedia_depotkimia_22-10-2026.xlsx',
+  head:['Nomor Invoice','Status Terakhir','Nama Pembeli','Nomor SKU','Nama Produk','Jumlah Produk Dibeli','Harga Jual (IDR)'],
+  rows:[
+   ['INV/20261022/MPL/4410021','Pesanan Diproses','laundry.bersih','CHEM-NA2CO3-1KG','Soda Ash Dense Na2CO3 1 KG',10,13000],
+   ['INV/20261022/MPL/4410033','Pesanan Diproses','budi.kolam','BDL-H2SO4-NACL-1KG','Asam Sulfat H2SO4 98% 1 KG + NACL 1KG',2,49000],
+   ['INV/20261022/MPL/4410033','Pesanan Diproses','budi.kolam','WT-TCCA90-1KG','Kaporit TCCA 90% 1 kg',1,52000],
+   ['INV/20261022/MPL/4410057','Pesanan Diproses','agus_teknik','CHEM-H2SO4-5KG','Asam Sulfat H2SO4 98% - 5KG',1,185000],
+   ['INV/20261022/MPL/4410060','Dibatalkan Pembeli','dina.r','FG-CA-1KG','Citric Acid Food Grade 1 KG',2,38000],
+   ['INV/20261022/MPL/4410078','Pesanan Diproses','toko_akuarium','WT-AQD-LQ-1L','Aquadest 1 Liter',6,8800],
+  ]},
+};
+V.mp=()=>{ const um=[...new Set(S.orders.filter(o=>o.status!=='batal').flatMap(unmapped))]; const st=S.store||'zdo', sf=STORES[st];
+  return `<h2>Marketplace</h2>
+  <section class="panel"><div class="row between"><h3>Impor pesanan</h3><span class="muted small">Gudang kirim: ${WH.SBY}</span></div>
+  <div class="row">${Object.entries(STORES).map(([k,v])=>`<button class="btn ${k===st?'primary':''}" data-act="mp-store" data-s="${k}">${v.name} · ${v.channel}</button>`).join('')}</div>
+  <p class="muted">Unduh file pesanan dari Seller Center, lalu upload di sini. Nama kolom tiap marketplace berbeda; sistem mengenalinya dan menyimpan pengaturannya per toko.</p>
+  <div class="tbl-wrap"><table><thead><tr>${sf.head.map((h,i)=>`<th class="${i>=5?'n':''}">${h}</th>`).join('')}</tr></thead><tbody>
+  ${sf.rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i>=5?'n':''} ${i===0||i===3?'code':''}">${i===6?q(c):esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+  <p class="muted small">Isi file contoh: ${sf.file} (${sf.rows.length} baris).</p>
+  <div class="row"><button class="btn primary" data-act="mp-import">Impor file ${sf.name}</button></div>
+  ${S.lastImport?`<div class="note"><b>Hasil impor:</b> ${S.lastImport}</div>`:''}</section>
+  <section class="panel"><h3>Pemetaan SKU marketplace</h3>
+  <p class="muted small">SKU di marketplace yang beda dengan SKU gudang (paket, varian, nama lama) cukup dipetakan sekali.</p>
+  <div class="tbl-wrap"><table><thead><tr><th>SKU marketplace</th><th>Jadi produk gudang</th></tr></thead><tbody>
+   ${Object.entries(S.mapping).map(([k,v])=>`<tr><td class="code">${k}</td><td>${v.map(x=>`${esc(prod(x.sku).name)} × ${x.mult}`).join(', ')}</td></tr>`).join('')}
+   ${um.map(s=>`<tr><td class="code">${s} <span class="badge b-bad">belum dipetakan</span>${s==='CHEM-H2SO4-5KG'?'<div class="muted small">Di Master HPP tercatat sebagai bundling 5 KG → 5 jirigen 1 KG</div>':''}</td><td><div class="row"><select id="map-${s}">${P.map(p=>`<option value="${p.sku}" ${p.sku==='CHEM-H2SO4-1KG'?'selected':''}>${esc(p.name)}</option>`).join('')}</select><label class="row small">×<input id="mult-${s}" type="number" min="1" value="${s==='CHEM-H2SO4-5KG'?5:1}" style="width:70px" aria-label="Kali"></label><button class="btn" data-act="map-save" data-s="${s}">Simpan</button></div></td></tr>`).join('')}
+  </tbody></table></div></section>
+  <section class="panel"><h3>Pesanan</h3>${S.orders.length?`<div class="tbl-wrap"><table><thead><tr><th>No. pesanan</th><th>Toko</th><th>Pembeli</th><th class="n">Nilai</th><th>Status</th></tr></thead><tbody>${S.orders.map(o=>`<tr><td class="code">${o.id}</td><td class="small">${STORES[o.store].name}<br>${STORES[o.store].channel}</td><td>${esc(o.buyer)}</td><td class="n">${rp(o.lines.reduce((a,l)=>a+l.qty*l.price,0))}</td><td>${stBadge(o.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada pesanan. Impor file contoh di atas.</div>'}</section>`;};
+
+/* ---------- B2B ---------- */
+V.b2b=()=>{ const can=r=>r.includes(S.role);
+  return `<h2>B2B & faktur</h2>
+  ${S.sos.map((so,i)=>{const sub=so.lines.reduce((a,l)=>a+l.qty*l.price,0), tax=Math.round(sub*so.tax/100), tot=sub+tax; const inv=S.invoices.find(x=>x.so===so.no);
+   const steps=['draft','confirmed','dikirim','faktur','lunas']; const cur=inv?(inv.status==='lunas'?'lunas':'faktur'):so.status; const ci=steps.indexOf(cur);
+   return `<section class="panel"><div class="row between"><h3>${so.no} · ${esc(custName(so.cust))}</h3>${stBadge(inv?inv.status:so.status)}</div>
+   <div class="flow">${['Draft','Dikonfirmasi','Dikirim gudang','Difakturkan','Lunas'].map((s,j)=>`<span class="${j<ci?'done':j===ci?'on':''}">${s}</span>`).join('')}</div>
+   <div class="tbl-wrap"><table><thead><tr><th>Produk</th><th class="n">Qty</th><th class="n">Harga</th><th class="n">Jumlah</th></tr></thead><tbody>${so.lines.map(l=>`<tr><td>${esc(prod(l.sku).name)}</td><td class="n">${q(l.qty)}</td><td class="n">${rp(l.price)}</td><td class="n">${rp(l.qty*l.price)}</td></tr>`).join('')}
+   <tr><td colspan="3" class="n muted">PPN ${so.tax}%</td><td class="n">${rp(tax)}</td></tr><tr><td colspan="3" class="n"><b>Total</b></td><td class="n qty">${rp(tot)}</td></tr></tbody></table></div>
+   <div class="row">
+    ${so.status==='draft'&&can(['owner','sales'])?`<button class="btn primary" data-act="so-confirm" data-i="${i}">Konfirmasi SO</button>`:''}
+    ${so.status==='confirmed'&&can(['owner','sales','gudang'])?`<button class="btn primary" data-act="so-ship" data-i="${i}">Kirim dari gudang (FEFO)</button>`:''}
+    ${so.status==='dikirim'&&!inv&&can(['owner','finance','sales'])?`<button class="btn primary" data-act="so-invoice" data-i="${i}">Buat faktur</button>`:''}
+    ${inv&&inv.status!=='lunas'&&can(['owner','finance'])?`<button class="btn primary" data-act="inv-pay" data-no="${inv.no}">Catat pembayaran ${rp(inv.total-inv.paid)}</button>`:''}
+    ${so.status==='draft'&&!can(['owner','sales'])?`<span class="muted small">Konfirmasi dilakukan Sales/Owner.</span>`:''}
+   </div>${inv?`<p class="small muted">Faktur ${inv.no} · jatuh tempo ${fdate(inv.due)}</p>`:''}</section>`}).join('')}
+  ${['owner','sales'].includes(S.role)?`<section class="panel"><h3>SO baru</h3><div class="grid2">
+   <label class="field"><span>Pelanggan</span><select id="so-c">${S.customers.map(c=>`<option value="${c.code}" ${c.code==='TK-AYU'?'selected':''}>${esc(c.name)} (limit ${rp(c.limit)})</option>`).join('')}</select></label>
+   <label class="field"><span>Produk</span><select id="so-p">${P.map(p=>`<option value="${p.sku}" ${p.sku==='ZDO-RO-MXF-40'?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
+   <label class="field"><span>Qty</span><input id="so-q" type="number" min="1" value="30"></label>
+   <label class="field"><span>Harga satuan</span><input id="so-h" type="number" min="0" value="29000"></label></div>
+   <div class="row"><button class="btn" data-act="so-new">Buat SO</button></div><p class="muted small">Coba buat SO 30 pcs untuk Toko Kosmetik Ayu: sistem menolak saat konfirmasi karena melebihi limit kredit (masih ada piutang lama yang telat bayar).</p></section>`:''}
+  <section class="panel"><h3>Piutang</h3><div class="tbl-wrap"><table><thead><tr><th>Faktur</th><th>Pelanggan</th><th>Jatuh tempo</th><th class="n">Sisa</th><th>Status</th></tr></thead><tbody>
+  ${S.invoices.map(i=>`<tr><td class="code">${i.no}</td><td>${esc(custName(i.cust))}</td><td>${fdate(i.due)} ${i.status!=='lunas'&&days(i.due)<0?`<span class="badge b-bad">telat ${-days(i.due)} hari</span>`:''}</td><td class="n">${rp(i.total-i.paid)}</td><td>${stBadge(i.status)}</td></tr>`).join('')}</tbody></table></div></section>`;};
+
+/* ---------- Selisih ---------- */
+V.selisih=()=>`<h2>Selisih stok</h2><p class="muted">Semua selisih dari opname, penyesuaian, dan transfer di satu tempat, lengkap dengan alasan dan siapa yang menyetujui.</p>
+ <section class="panel">${S.discrepancies.length?`<div class="tbl-wrap"><table><thead><tr><th>Sumber</th><th>Dokumen</th><th>Gudang</th><th>Produk</th><th>Batch</th><th class="n">Selisih</th><th class="n">Nilai</th><th>Alasan</th><th>Disetujui</th></tr></thead><tbody>
+ ${S.discrepancies.map(d=>`<tr><td>${d.src}</td><td class="code">${d.doc}</td><td>${d.wh}</td><td>${esc(prod(d.sku).name)}</td><td class="code">${d.no}</td><td class="n qty" style="color:${d.qty<0?'var(--bad)':'var(--ok)'}">${d.qty>0?'+':''}${q(d.qty)}</td><td class="n">${rp(d.val)}</td><td>${esc(d.reason)}</td><td class="small">${esc(d.by)}</td></tr>`).join('')}
+ </tbody></table></div><p class="small"><b>Total nilai selisih: ${rp(S.discrepancies.reduce((a,d)=>a+d.val,0))}</b></p>`:'<div class="empty">Belum ada selisih. Coba stock opname atau terima transfer dengan jumlah kurang.</div>'}</section>`;
+
+/* ---------- Export ---------- */
+const DATASETS={
+ stok:['Stok per batch & rak',()=>stockRows().map(r=>({gudang:r.wh,rak:r.code,brand:prod(r.sku).brand,sku:r.sku,produk:prod(r.sku).name,batch:r.no,expired:r.exp,qty:r.qty,hpp_satuan:r.cost,nilai:r.qty*r.cost}))],
+ ledger:['Buku besar stok (kartu stok)',()=>S.moves.map(m=>({waktu:m.t.toISOString().slice(0,19).replace('T',' '),gudang:m.wh,rak:m.loc,sku:m.sku,batch:m.batch,jenis:m.type,qty:m.qty,dokumen:m.doc,keterangan:m.note||'',oleh:m.by}))],
+ sales:['Penjualan gabungan (B2B + marketplace)',()=>[
+   ...S.invoices.filter(i=>S.sos.find(s=>s.no===i.so)).flatMap(i=>S.sos.find(s=>s.no===i.so).lines.map(l=>({kanal:'b2b',tanggal:i.date,dokumen:i.no,pelanggan:custName(i.cust),brand:prod(l.sku).brand,sku:l.sku,qty:l.qty,harga:l.price,nilai:l.qty*l.price}))),
+   ...S.orders.filter(o=>o.status!=='batal').flatMap(o=>o.lines.map(l=>({kanal:STORES[o.store].channel.toLowerCase(),tanggal:o.date,dokumen:o.id,pelanggan:o.buyer,brand:o.store==='zdo'?'ZDO':'DKM',sku:l.sku,qty:l.qty,harga:l.price,nilai:l.qty*l.price})))]],
+ selisih:['Selisih stok',()=>S.discrepancies.map(d=>({sumber:d.src,dokumen:d.doc,gudang:d.wh,sku:d.sku,batch:d.no,qty_selisih:d.qty,nilai:d.val,alasan:d.reason,disetujui:d.by}))],
+ piutang:['Piutang B2B',()=>S.invoices.map(i=>({faktur:i.no,pelanggan:custName(i.cust),tanggal:i.date,jatuh_tempo:i.due,total:i.total,dibayar:i.paid,sisa:i.total-i.paid,status:i.status}))],
+};
+V.export=()=>{ const k=S.exp||'stok'; const [label,fn]=DATASETS[k]; const rows=fn(); const cols=rows.length?Object.keys(rows[0]):[];
+  const sums=cols.filter(c=>rows.length&&rows.every(r=>typeof r[c]==='number')&&!/harga|hpp/.test(c)).map(c=>[c,rows.reduce((a,r)=>a+r[c],0)]);
+  return `<h2>Export data</h2><p class="muted">Untuk finance dan pembukuan (mis. diimpor ke Accurate). Data diambil penuh per halaman lalu dicocokkan dengan jumlah baris di server, jadi tidak ada baris yang terpotong.</p>
+  <section class="panel"><div class="grid2"><label class="field"><span>Data</span><select id="exp-k">${Object.entries(DATASETS).map(([id,[l]])=>`<option value="${id}" ${id===k?'selected':''}>${l}</option>`).join('')}</select></label>
+  <label class="field"><span>Gudang</span><select disabled><option>Semua gudang</option></select></label><label class="field"><span>Periode</span><select disabled><option>Bulan ini</option></select></label></div>
+  <div class="note"><b>Lembar Ringkasan</b> (ikut di file Excel): ${rows.length} baris${sums.map(([c,v])=>` · ${c.startsWith('total')?c:'total '+c}: ${/nilai|total|sisa|dibayar/.test(c)?rp(v):q(v)}`).join('')}. Cocokkan angka ini dengan laporan di aplikasi sebelum diimpor ke pembukuan.</div>
+  <div class="tbl-wrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr>${cols.map(c=>`<td class="${typeof r[c]==='number'?'n':''}">${typeof r[c]==='number'?q(r[c]):esc(r[c])}</td>`).join('')}</tr>`).join('')||`<tr><td><div class="empty">Belum ada data untuk ${label.toLowerCase()}.</div></td></tr>`}</tbody></table></div>
+  <div class="row"><button class="btn primary" data-act="exp-copy">Salin sebagai CSV</button><span class="muted small">Di aplikasi asli ada tombol Unduh Excel (.xlsx) dan CSV.</span></div></section>`;};
+
+/* ================= SCAN SHEET ================= */
+const scanFab=mode=>`<button class="btn tape scanfab" data-act="scan-open" data-m="${mode}">Scan barcode</button>`;
+function openScan(mode){ S.scanMode=mode;
+  const locChips= mode==='in'?locsOf(S.wh).map(l=>`<button class="chip loc" data-act="scan-code" data-c="L-${S.wh}-${l.code}"><b>Rak ${l.code}</b>L-${S.wh}-${l.code}</button>`).join(''):'';
+  $('#overlay').innerHTML=`<div class="sheet-bg" data-act="scan-close-bg"><div class="sheet" role="dialog" aria-label="Scan barcode">
+   <div class="row between"><h3>Scan barcode</h3><button class="btn ghost" data-act="scan-close">Tutup</button></div>
+   <div class="vf-wrap"><div class="viewfinder"></div><p>Di HP, kamera belakang terbuka di sini.<br>Di demo, ketuk barcode contoh di bawah.</p></div>
+   <form class="row" id="scanform"><label class="field" style="flex:1"><span>Atau ketik / pakai scanner USB</span><input id="scan-in" autocomplete="off" placeholder="Barcode atau SKU"></label><button class="btn primary" style="align-self:end">OK</button></form>
+   <div><p class="small muted" style="margin-bottom:6px">Barcode di kardus (contoh):</p><div class="chips">
+    ${P.map(p=>`<button class="chip" data-act="scan-code" data-c="${p.bc}"><b>${esc(p.name)}</b>${p.bc}</button>`).join('')}
+    <button class="chip" data-act="scan-code" data-c="8990000999999"><b>Barang tak dikenal</b>8990000999999</button>${locChips}
+   </div></div></div></div>`;
+  setTimeout(()=>$('#scan-in')?.focus(),50);
+}
+function closeScan(){ $('#overlay').innerHTML=''; }
+function onScan(code){ code=String(code).trim(); if(!code) return;
+  if(/^L-/.test(code)){ const [,w,...c]=code.split('-'); const loc=w+':'+c.join('-');
+    if(S.scanMode==='in'&&w===S.wh){S.inbound.loc=loc; banner('info','Rak '+c.join('-'),'Barang berikutnya ditaruh di sini'); render(); return;}
+    banner('bad','BUKAN RAK GUDANG INI','Scan barang, bukan label rak'); return; }
+  const p=prod(code);
+  if(!p){ banner('bad','BARCODE TIDAK DIKENAL',code+' belum terdaftar di Produk'); return; }
+  if(S.scanMode==='in'){ closeScan();
+    const known=S.batches.filter(b=>b.sku===p.sku).sort((a,b)=>b.exp.localeCompare(a.exp))[0];
+    S.inbound.pending={sku:p.sku,no:known?known.no:'',exp:known?known.exp:'',qty:12}; banner('ok','BENAR · '+p.name,'Isi batch & expired dari label'); render(); return; }
+  if(S.scanMode==='pick'){ const pk=S.picking; const lines=pk.picks.filter(x=>x.sku===p.sku);
+    if(!lines.length){ banner('bad','SALAH BARANG',p.name+' tidak ada di daftar ambil'); return; }
+    const l=lines.find(x=>x.picked<x.qty); if(!l){ banner('bad','KELEBIHAN',p.name+' sudah lengkap. Kembalikan ke rak.'); return; }
+    l.picked++; const rem=lines.reduce((a,x)=>a+x.qty-x.picked,0); banner('ok','BENAR · '+p.name,`Rak ${l.loc.split(':')[1]} · batch ${batch(l.b).no} · sisa ${rem}`); render(); return; }
+  if(S.scanMode==='count'){ const c=S.count; const bt=S.batches.filter(b=>b.sku===p.sku).find(b=>balOf(b.id,c.loc)>0)||S.batches.find(b=>b.sku===p.sku);
+    let l=c.lines.find(x=>x.b===bt.id); if(!l){l={sku:p.sku,b:bt.id,qty:0};c.lines.push(l)} l.qty++; banner('ok','+1 · '+p.name,`Batch ${bt.no} · dihitung ${l.qty}`); render(); return; }
+}
+
+/* ================= AKSI ================= */
+const A={};
+A.go=d=>{ if(!allowed(d.v.split('/')[0])){ banner('bad','AKSES DITOLAK','Menu ini bukan untuk peran Anda'); return;} S.view=d.v; render(); window.scrollTo(0,0); };
+A['scan-open']=d=>openScan(d.m); A['scan-close']=closeScan; A['scan-close-bg']=(d,e)=>{ if(e.target.classList.contains('sheet-bg')) closeScan(); };
+A['scan-code']=d=>onScan(d.c);
+A['in-addpending']=()=>{ const p=S.inbound.pending; const no=$('#pb-no').value.trim().toUpperCase(), exp=$('#pb-exp').value, qty=+$('#pb-qty').value;
+  if(!no) return banner('bad','BATCH WAJIB DIISI','Lihat nomor batch di label kemasan');
+  if(!exp) return banner('bad','EXPIRED WAJIB DIISI','Tanggal expired diperlukan untuk FEFO');
+  if(!(qty>0)) return banner('bad','JUMLAH TIDAK VALID','Isi jumlah lebih dari 0');
+  const ex=S.batches.find(b=>b.sku===p.sku&&b.no===no); if(ex&&ex.exp!==exp) return banner('bad','EXPIRED TIDAK COCOK',`Batch ${no} tercatat expired ${fdate(ex.exp)}`);
+  const same=S.inbound.lines.find(l=>l.sku===p.sku&&l.no===no&&l.loc===S.inbound.loc); if(same) same.qty+=qty; else S.inbound.lines.push({sku:p.sku,no,exp,qty,loc:S.inbound.loc});
+  S.inbound.pending=null; banner('ok','DITAMBAHKAN',`${prod(p.sku).name} · ${no} · ${qty}`); render(); };
+A['in-droppending']=()=>{S.inbound.pending=null;render()};
+A['in-del']=d=>{S.inbound.lines.splice(+d.i,1);render()};
+A['in-cancel']=()=>{S.inbound=null;S.view='gudang';render()};
+A['in-post']=()=>{ const d=S.inbound; d.source=$('#in-src').value;
+  d.lines.forEach(l=>{ let b=S.batches.find(x=>x.sku===l.sku&&x.no===l.no); if(!b){ b={id:S.batches.length+1,sku:l.sku,no:l.no,exp:l.exp,cost:prod(l.sku).cost}; S.batches.push(b);} move(b.id,l.loc,l.qty,'masuk',d.no,$('#in-partner').value); });
+  S.history.push(d.no); S.inChecks.push({no:d.no,wh:S.wh,date:new Date().toISOString().slice(0,10),partner:$('#in-partner').value,items:d.lines.length+' baris · '+q(d.lines.reduce((a,l)=>a+l.qty,0))+' pcs',checked:null}); banner('ok','BARANG MASUK DIPOSTING',`${d.no} · ${d.lines.length} baris`); S.inbound=null; S.view='stok'; render(); };
+A['pick-create']=()=>{ const ids=[...document.querySelectorAll('.ordsel:checked')].map(x=>x.value); if(!ids.length) return banner('bad','PILIH PESANAN','Centang minimal satu pesanan');
+  const need={}; S.orders.filter(o=>ids.includes(o.id)).forEach(o=>o.lines.forEach(l=>{ (S.mapping[l.sku]||[{sku:l.sku,mult:1}]).forEach(m=>need[m.sku]=(need[m.sku]||0)+l.qty*m.mult); }));
+  const picks=[], short=[]; for(const sku in need){ const r=fefo(S.wh,sku,need[sku]); picks.push(...r.picks); if(r.short>0) short.push(`${sku} kurang ${r.short}`); }
+  if(short.length) return banner('bad','STOK SIAP KIRIM TIDAK CUKUP',short.join('; '));
+  S.picking={no:docno('OUT'),orders:ids,picks,manual:false}; S.orders.forEach(o=>{if(ids.includes(o.id)) o.status='diproses'}); render(); };
+A['pk-manual']=()=>{S.picking.manual=$('#pk-manual').checked};
+A['pick-cancel']=()=>{ S.orders.forEach(o=>{if(S.picking.orders.includes(o.id)) o.status='baru'}); S.picking=null; render(); };
+A['pick-post']=()=>{ const pk=S.picking; const left=pk.picks.filter(p=>p.picked<p.qty);
+  if(left.length&&!pk.manual) return banner('bad','BELUM SEMUA DI-SCAN',left.map(p=>`${p.sku} kurang ${p.qty-p.picked}`).join('; '));
+  pk.picks.forEach(p=>move(p.b,p.loc,-p.qty,'keluar',pk.no,'marketplace'+(pk.manual?' (manual)':'')));
+  S.orders.forEach(o=>{if(pk.orders.includes(o.id)) o.status='dikirim'}); banner('ok','BARANG KELUAR SELESAI',`${pk.no} · ${pk.orders.length} pesanan dikirim`); S.picking=null; render(); };
+A['tr-create']=()=>{ const to=$('#tr-to').value, sku=$('#tr-sku').value, qty=+$('#tr-qty').value; const r=fefo(S.wh,sku,qty);
+  if(!(qty>0)) return banner('bad','JUMLAH TIDAK VALID','');
+  if(r.short>0) return banner('bad','STOK TIDAK CUKUP',`${sku} kurang ${r.short}`);
+  const no=docno('TRF'); r.picks.forEach(p=>move(p.b,p.loc,-p.qty,'transfer_keluar',no,'ke '+to));
+  S.transfer={no,from:S.wh,to,status:'dikirim',lines:r.picks}; banner('ok','TRANSFER DIKIRIM',`${no} · stok ${S.wh} berkurang`); render(); };
+A['tr-receive']=()=>{ const t=S.transfer; const loc=$('#tr-loc').value, note=$('#tr-note').value.trim(); const rcv=t.lines.map((l,i)=>Math.max(0,Math.min(l.qty,+$('#tr-rcv-'+i).value||0)));
+  const short=t.lines.some((l,i)=>rcv[i]<l.qty); if(short&&!note) return banner('bad','ISI KETERANGAN SELISIH','Jumlah diterima kurang dari yang dikirim');
+  t.lines.forEach((l,i)=>{ if(rcv[i]>0) move(l.b,loc,rcv[i],'transfer_masuk',t.no,'dari '+t.from); if(rcv[i]<l.qty){const bt=batch(l.b);S.discrepancies.push({src:'transfer',doc:t.no,wh:t.to,sku:l.sku,no:bt.no,qty:rcv[i]-l.qty,val:(rcv[i]-l.qty)*bt.cost,reason:note,by:roleName()})} });
+  S.transfer=null; banner('ok','TRANSFER DITERIMA',short?'Selisih tercatat di laporan':'Semua sesuai'); render(); };
+A['mv-go']=()=>{ const [b,from]=$('#mv-src').value.split('|'), to=$('#mv-to').value, qty=+$('#mv-qty').value;
+  if(from===to) return banner('bad','RAK SAMA','Pilih rak tujuan lain'); if(!(qty>0)) return banner('bad','JUMLAH TIDAK VALID','');
+  try{ const no=docno('PND'); move(+b,from,-qty,'pindah_lokasi',no,'ke '+to.split(':')[1]); move(+b,to,qty,'pindah_lokasi',no,'dari '+from.split(':')[1]); banner('ok','DIPINDAHKAN',`${qty} ke rak ${to.split(':')[1]}`); render(); }catch(e){ banner('bad','STOK TIDAK CUKUP',e.message) } };
+A['op-start']=()=>{ S.count={no:docno('OPN'),loc:$('#op-loc').value,lines:[]}; render(); };
+A['wk-count']=d=>{ if(S.count||S.pendingCount) return banner('bad','SELESAIKAN OPNAME BERJALAN','Masih ada opname yang belum selesai'); S.count={no:docno('OPN'),loc:S.wh+':'+d.r,lines:[]}; S.view='gudang/opname'; render(); };
+A['wk-in']=d=>{ S.inChecks[+d.k].checked=roleName()+' · hari ini'; banner('ok','BARANG MASUK TERVERIFIKASI',S.inChecks[+d.k].no); render(); };
+function wkSet(loc,obj){ const [w,r]=loc.split(':'); (S.weekly[w]=S.weekly[w]||{})[r]=obj; }
+A['op-set']=(d,e)=>{};
+A['op-cancel']=()=>{S.count=null;render()};
+A['op-submit']=()=>{ const c=S.count; document.querySelectorAll('[data-act="op-set"]').forEach(inp=>c.lines[+inp.dataset.i].qty=Math.max(0,+inp.value||0));
+  stockRows(S.wh).filter(r=>r.loc===c.loc).forEach(r=>{ if(!c.lines.find(l=>l.b===r.b)) c.lines.push({sku:r.sku,b:r.b,qty:0,auto:true}); });
+  c.lines.forEach(l=>l.sys=balOf(l.b,c.loc)); S.pendingCount=c; S.count=null; wkSet(c.loc,{st:'menunggu',by:roleName(),at:'hari ini'}); const n=c.lines.filter(l=>l.qty!==l.sys).length;
+  banner(n?'info':'ok',n?`${n} BARIS SELISIH`:'SEMUA COCOK',n?'Isi alasan, lalu tunggu persetujuan':'Tetap perlu disetujui'); render(); };
+function readReasons(){ S.pendingCount.lines.forEach((l,i)=>{const s=$('#op-r-'+i); if(s) l.reason=s.value}); }
+A['op-savereason']=()=>{ readReasons(); banner('ok','ALASAN DISIMPAN','Menunggu persetujuan supervisor'); };
+A['op-reopen']=()=>{ const c=S.pendingCount; c.lines=c.lines.filter(l=>!l.auto); S.count=c; S.pendingCount=null; render(); };
+A['op-approve']=()=>{ readReasons(); const c=S.pendingCount; const miss=c.lines.filter(l=>l.qty!==l.sys&&!l.reason);
+  if(miss.length) return banner('bad','ALASAN BELUM LENGKAP',`${miss.length} baris selisih tanpa alasan`);
+  c.lines.forEach(l=>{ const d=l.qty-l.sys; if(d){ move(l.b,c.loc,d,'opname',c.no,l.reason); const bt=batch(l.b); S.discrepancies.push({src:'opname',doc:c.no,wh:c.loc.split(':')[0],sku:l.sku,no:bt.no,qty:d,val:d*bt.cost,reason:l.reason,by:roleName()}) } });
+  const diff=c.lines.reduce((a,l)=>a+l.qty-l.sys,0), any=c.lines.some(l=>l.qty!==l.sys);
+  wkSet(c.loc,{st:any?'selisih':'cocok',qty:diff,by:roleName(),at:'hari ini'});
+  S.pendingCount=null; banner('ok','OPNAME DISETUJUI','Stok sudah mengikuti hasil hitung'); render(); };
+A['mp-store']=d=>{S.store=d.s;S.lastImport='';render()};
+function moPost(m){ if(m.b){ move(m.b,m.loc,-m.qty,'keluar',m.no,MO_PURPOSE[m.purpose]+': '+m.note); }
+  else { const r=fefo(m.wh,m.sku,m.qty); if(r.short>0) throw new Error(`Stok siap kirim ${m.sku} kurang ${r.short}`); r.picks.forEach(p=>move(p.b,p.loc,-p.qty,'keluar',m.no,MO_PURPOSE[m.purpose]+': '+m.note)); } }
+A['mo-submit']=()=>{ const purpose=$('#mo-purpose').value, sku=$('#mo-sku').value, bsel=$('#mo-batch').value, qty=+$('#mo-qty').value, note=$('#mo-note').value.trim();
+  if(!(qty>0)) return banner('bad','JUMLAH TIDAK VALID','Isi jumlah lebih dari 0');
+  if(!note) return banner('bad','KETERANGAN WAJIB','Tulis alasan barang dikeluarkan');
+  const m={no:docno('OUT'),wh:S.wh,purpose,sku,qty,note,by:roleName(),status:'pending'};
+  if(bsel!=='fefo'){ const [b,loc]=bsel.split('|'); m.b=+b; m.loc=loc; const bt=batch(m.b);
+    if(days(bt.exp)<0&&purpose!=='rusak_musnah') return banner('bad','BATCH KEDALUWARSA','Batch kedaluwarsa hanya boleh keluar untuk dimusnahkan');
+    if(balOf(m.b,loc)<qty) return banner('bad','STOK TIDAK CUKUP',`Batch ${bt.no} di rak ${loc.split(':')[1]} hanya ${balOf(m.b,loc)}`); }
+  if(S.role==='gudang'){ S.manualOut.unshift(m); banner('info','DIAJUKAN KE SUPERVISOR',`${m.no} · stok belum berkurang`); render(); return; }
+  try{ moPost(m); m.status='posted'; m.approver='Langsung oleh '+roleName(); S.manualOut.unshift(m); banner('ok','BARANG KELUAR',`${m.no} · ${qty} ${prod(sku).name}`); render(); }catch(e){ banner('bad','GAGAL',e.message) } };
+A['mo-approve']=d=>{ const m=S.manualOut.find(x=>x.no===d.no); try{ moPost(m); m.status='posted'; m.approver='Disetujui '+roleName(); banner('ok','DISETUJUI',`${m.no} · stok berkurang`); render(); }catch(e){ banner('bad','GAGAL',e.message) } };
+A['mo-reject']=d=>{ const m=S.manualOut.find(x=>x.no===d.no); m.status='ditolak'; banner('info','DITOLAK',`${m.no} · stok tidak berubah`); render(); };
+A['mp-import']=()=>{ let nw=0,dup=0,bt=0; const groups={}; const st=S.store||'zdo', SAMPLE=STORES[st].rows;
+  SAMPLE.forEach(r=>{(groups[r[0]]=groups[r[0]]||{id:r[0],store:st,status:r[1],buyer:r[2],lines:[]}).lines.push({sku:r[3],name:r[4],qty:r[5],price:r[6]})});
+  Object.values(groups).forEach(g=>{ if(S.orders.find(o=>o.id===g.id)){dup++;return} const cancel=/batal|cancel/i.test(g.status); if(cancel) bt++;
+    S.orders.push({...g,date:new Date().toISOString().slice(0,10),status:cancel?'batal':'baru'}); nw++; });
+  const um=[...new Set(S.orders.filter(o=>o.status!=='batal').flatMap(unmapped))];
+  S.lastImport= nw?`${SAMPLE.length} baris → ${nw} pesanan baru (${bt} batal), ${um.length} SKU belum dipetakan (${um.join(', ')}).`:`${dup} pesanan sudah pernah diimpor, dilewati. Tidak ada pesanan dobel.`;
+  S.importedOnce=true; banner(nw?'ok':'info',nw?'IMPOR BERHASIL':'TIDAK ADA YANG DOBEL',S.lastImport); render(); };
+A['map-save']=d=>{ S.mapping[d.s]=[{sku:$('#map-'+d.s).value,mult:+$('#mult-'+d.s).value||1}]; banner('ok','SKU DIPETAKAN',`${d.s} → ${prod(S.mapping[d.s][0].sku).name}`); render(); };
+A['so-new']=()=>{ const so={no:docno('SO'),cust:$('#so-c').value,wh:S.wh,lines:[{sku:$('#so-p').value,qty:+$('#so-q').value,price:+$('#so-h').value}],tax:11,status:'draft'};
+  if(!(so.lines[0].qty>0)) return banner('bad','QTY TIDAK VALID',''); S.sos.unshift(so); banner('ok','SO DIBUAT',so.no); render(); };
+A['so-confirm']=d=>{ const so=S.sos[+d.i]; const c=S.customers.find(x=>x.code===so.cust); const tot=so.lines.reduce((a,l)=>a+l.qty*l.price,0)*(1+so.tax/100);
+  const out=S.invoices.filter(i=>i.cust===so.cust&&i.status!=='lunas').reduce((a,i)=>a+i.total-i.paid,0);
+  if(out+tot>c.limit) return banner('bad','MELEBIHI LIMIT KREDIT',`Piutang ${rp(out)} + order ${rp(tot)} > limit ${rp(c.limit)}`);
+  so.status='confirmed'; banner('ok','SO DIKONFIRMASI','Gudang bisa mengirim'); render(); };
+A['so-ship']=d=>{ const so=S.sos[+d.i]; const out=docno('OUT'); const all=[];
+  for(const l of so.lines){ const r=fefo(so.wh,l.sku,l.qty); if(r.short>0) return banner('bad','STOK TIDAK CUKUP',`${l.sku} kurang ${r.short}`); all.push(...r.picks); }
+  all.forEach(p=>move(p.b,p.loc,-p.qty,'keluar',out,'B2B '+so.no)); so.status='dikirim'; banner('ok','BARANG DIKIRIM',`${out} · batch dipilih FEFO`); render(); };
+A['so-invoice']=d=>{ const so=S.sos[+d.i]; const c=S.customers.find(x=>x.code===so.cust); const tot=Math.round(so.lines.reduce((a,l)=>a+l.qty*l.price,0)*(1+so.tax/100));
+  const date=new Date().toISOString().slice(0,10); const due=new Date(Date.now()+c.terms*864e5).toISOString().slice(0,10);
+  S.invoices.unshift({no:docno('INV'),cust:so.cust,date,due,total:tot,paid:0,status:'belum_lunas',so:so.no}); banner('ok','FAKTUR DIBUAT',`Jatuh tempo ${c.terms} hari`); render(); };
+A['inv-pay']=d=>{ const i=S.invoices.find(x=>x.no===d.no); i.paid=i.total; i.status='lunas'; banner('ok','PEMBAYARAN DICATAT',`${i.no} lunas`); render(); };
+A['exp-copy']=()=>{ const [,fn]=DATASETS[S.exp||'stok']; const rows=fn(); if(!rows.length) return banner('bad','TIDAK ADA DATA','');
+  const cols=Object.keys(rows[0]); const csv=[cols.join(','),...rows.map(r=>cols.map(c=>{const v=r[c];return typeof v==='number'?v:'"'+String(v??'').replace(/"/g,'""')+'"'}).join(','))].join('\n');
+  const ok=()=>banner('ok','CSV DISALIN',`${rows.length} baris. Tempel di Excel / Google Sheets`);
+  try{ navigator.clipboard.writeText(csv).then(ok,()=>banner('bad','GAGAL MENYALIN','Browser menolak akses clipboard')); }catch(e){ banner('bad','GAGAL MENYALIN','') } };
+
+/* ================= RENDER ================= */
+function back(v,l='Operasi gudang'){return `<button class="btn ghost" data-act="go" data-v="${v}" style="justify-self:start">← ${l}</button>`}
+function render(){ if(!allowed(S.view.split('/')[0])) S.view='home'; renderMenu(); $('#view').innerHTML=(V[S.view]||V.home)(); }
+document.addEventListener('click',e=>{ const el=e.target.closest('[data-act]'); if(!el) return; const a=A[el.dataset.act]; if(!a) return;
+  if(el.tagName==='INPUT'&&el.type!=='checkbox') return; if(el.tagName!=='INPUT') e.preventDefault(); try{ a(el.dataset,e) }catch(err){ banner('bad','GAGAL',err.message) } });
+document.addEventListener('submit',e=>{ if(e.target.id==='scanform'){ e.preventDefault(); const v=$('#scan-in').value; $('#scan-in').value=''; onScan(v); } });
+document.addEventListener('input',e=>{ if(e.target.id==='stok-q'){ S.stokQ=e.target.value; const pos=e.target.selectionStart; render(); const i=$('#stok-q'); i.focus(); i.setSelectionRange(pos,pos);} });
+document.addEventListener('change',e=>{ if(e.target.id==='exp-k'){S.exp=e.target.value;render()} if(e.target.id==='mo-sku'){S.moSku=e.target.value;S.moPurpose=$('#mo-purpose').value;render()} });
+$('#role').addEventListener('change',e=>{ S.role=e.target.value; render(); banner('info','Masuk sebagai '+e.target.selectedOptions[0].text,'Menu menyesuaikan peran'); });
+$('#whsel').innerHTML=Object.entries(WH).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+$('#whsel').addEventListener('change',e=>{ S.wh=e.target.value; render(); });
+seed(); render();
+</script>
