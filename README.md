@@ -1,103 +1,90 @@
 # Warehouse Sistem 4 Keledai
 
-Aplikasi gudang sederhana untuk usaha multi-brand (contoh: **Zerodeo** dan **Depot Kimia**).
-Satu aplikasi, empat dashboard yang saling terhubung:
+Sistem gudang untuk usaha multi-brand (contoh: **Zerodeo** dan **Depot Kimia**), tersambung ke database **Supabase**.
+Semua HP dan laptop tim melihat data yang sama.
 
-| Peran | Yang dikerjakan | Lihat HPP? |
+**Alur harian**
+
+```
+Barang masuk (supplier, surat jalan, foto bukti)  ──►  stok bertambah per tanggal ED
+Barang keluar harian (Shopee/TikTok/Tokopedia/B2B…)  ──►  stok berkurang otomatis, ED terdekat dulu
+Stock opname mingguan (hitung fisik)  ──►  owner setujui  ──►  stok sistem = stok fisik
+Export Excel data masuk/keluar/kartu stok  ──►  pembukuan (Accurate, dll.)
+```
+
+| Peran | Bisa apa | Lihat HPP? |
 |---|---|---|
-| **Owner** | Pantau semua, setujui cek mingguan & keluar manual, tambah produk | Ya |
-| **Staf Gudang** | Kemas & kirim pesanan (scan SKU), terima barang, keluar manual, cek mingguan, cetak label | Tidak |
-| **Sales / Marketplace** | Impor pesanan Shopee/Tokopedia/TikTok, buat pesanan B2B & jual langsung, lihat stok tersedia | Tidak (hanya harga jual) |
-| **Finance** | Faktur & piutang B2B, verifikasi barang masuk, laporan & export untuk pembukuan | Ya |
+| **Owner** | Semua, termasuk menyetujui stock opname & barang keluar non-penjualan, kelola produk & pengguna | Ya |
+| **Staf gudang** | Barang masuk, barang keluar, stock opname, cek stok, cetak label | Tidak |
+| **Sales / Marketplace** | Lihat stok & riwayat barang keluar, harga jual | Tidak |
+| **Finance** | Verifikasi barang masuk, nilai stok, kartu stok, export Excel | Ya |
 
-> **Status:** `index.html` adalah **demo yang bisa dipakai mencoba alur** (data contoh, tersimpan di browser).
-> Database produksi (Supabase) sudah disiapkan dan diuji di folder `supabase/`. Lihat [Rencana ke produksi](#rencana-ke-produksi).
+## Aturan yang dijaga database
 
-## Tampilan
+- Stok **tidak bisa diedit langsung** dan **tidak bisa minus**. Stok hanya berubah lewat barang masuk, barang keluar, atau stock opname.
+- **Riwayat stok permanen**: setiap perubahan tercatat (siapa, kapan, dokumen apa) dan tidak bisa dihapus.
+- **ED wajib** untuk produk personal care. Barang keluar otomatis mengambil **ED terdekat dulu**.
+  Barang kedaluwarsa tidak bisa terjual, hanya bisa dikeluarkan sebagai "Rusak / kedaluwarsa".
+- Barang keluar **sampel / rusak / internal** yang diinput staf baru mengurangi stok **setelah disetujui owner**.
+- **Stock opname**: staf menghitung tanpa melihat angka sistem, selisih wajib diberi alasan, owner menyetujui.
+- HPP & nilai Rupiah **tidak terkirim** ke HP staf dan sales (disaring di database, bukan hanya disembunyikan di layar).
 
-Mengikuti design system **Winwin Berkah Amanah (WBA)**: logo Winwin asli (ikon di header, putih di tema gelap),
-warna `brand-green` / `royal-blue` / `azure`, huruf Montserrat (judul & angka) dan Figtree (isi).
-Layar loading memakai jenis *Denyut* dari WBA Design System dan hanya tampil saat pertama kali dibuka (belum ada data di perangkat).
+## Menyambungkan ke Supabase (sekali saja)
 
-## Alur yang tersambung
+1. **Buat project** di [supabase.com](https://supabase.com) → *New project* → region **Southeast Asia (Singapore)**. Simpan password database.
+2. **Pasang database**: menu **SQL Editor** → *New query* → salin **seluruh isi** `supabase/setup.sql` → tempel → **Run**.
+   Harus muncul *Success. No rows returned*. Lakukan ini **sebelum** ada yang mendaftar akun.
+3. **Pengaturan login**: menu **Authentication**
+   - *URL Configuration* → **Site URL** = `https://akarlabs.github.io/warehouse4-keledai/`
+   - *Sign In / Providers* → *Email*: matikan **Confirm email** supaya tim bisa langsung masuk setelah daftar
+     (kalau dibiarkan menyala, tiap orang harus klik link konfirmasi di email dulu).
+4. **Ambil kunci**: *Project Settings* → **API Keys**. Salin **Project URL** dan kunci **anon / publishable**
+   (yang boleh dipakai di browser). **Jangan** pakai kunci `service_role` / `secret`.
+5. **Isi `config.js`** di GitHub: buka file `config.js` → ikon pensil (Edit) → isi kedua nilai → *Commit changes*.
+   ```js
+   window.APP_CONFIG = {
+     supabaseUrl: "https://xxxxxxxx.supabase.co",
+     supabaseAnonKey: "eyJhbGciOi…  atau  sb_publishable_…"
+   };
+   ```
+   Kunci anon/publishable memang aman ditaruh di sini; data dilindungi aturan akses di database.
+6. Buka aplikasi → **Pasang pertama kali (khusus Owner)** → daftar dengan email Owner. **Akun pertama otomatis menjadi Owner.**
+7. Owner membuka menu **Pengguna** → *Buat akun tim*: isi ID (mis. `gudang1`), nama, peran, password awal → *Buat akun*.
+   Tim masuk di halaman depan cukup dengan **ID + password**; dashboard terbuka sesuai perannya.
+   (Butuh *Confirm email* dimatikan di langkah 3.)
 
-```
-Sales impor / buat pesanan ──► Staf kemas (scan SKU, ambil ED terdekat) ──► Dikirim
-                                                                           │
-                                       B2B ──► Finance buat faktur ──► Catat pembayaran
-Staf terima barang (supplier, surat jalan, foto bukti) ──► Finance verifikasi
-Staf hitung stok mingguan ──► Owner setujui selisih
-Staf ajukan keluar manual (sampel/rusak) ──► Owner setujui ──► stok berkurang
-```
+## Mulai memakai
 
-## Fitur utama
-
-- **Pantau ED (kedaluwarsa)** untuk produk personal care. ED wajib diisi saat barang masuk; produk kimia tanpa ED cukup jumlahnya.
-- **FEFO otomatis**: saat mengemas, sistem memberi tahu ED mana yang diambil dulu. Barang kedaluwarsa tidak bisa terjual, hanya bisa dikeluarkan sebagai "Rusak / kedaluwarsa".
-- **Scan pakai kode SKU**, tidak wajib barcode pabrik:
-  - Cetak **label QR berisi SKU** dari menu *Produk & label*, tempel di kardus/kemasan.
-  - Tombol **Scan** → *Buka kamera* (scan langsung) atau *Foto barcode / QR*.
-  - Tanpa label pun bisa: ketik sebagian SKU atau nama produk, ada saran otomatis.
-  - Barcode pabrik (EAN) tetap terbaca kalau diisi di data produk.
-- **Barang masuk** lengkap: pilih/tambah supplier, no. & tanggal surat jalan, foto bukti terima, nama penerima.
-- **Anti dobel impor marketplace**: file yang sama diimpor dua kali tidak menggandakan pesanan. SKU paket/bundling dipetakan sekali ke produk satuan.
-- **Cek mingguan**: staf menghitung fisik tanpa melihat angka sistem, selisih wajib diberi alasan, owner menyetujui.
-- **Riwayat stok permanen**: setiap perubahan stok tercatat (siapa, kapan, dokumen apa).
-- **Export** penjualan, stok & nilai, pembelian per supplier, piutang, riwayat — dengan total kontrol untuk dicocokkan.
-
-## Cara mencoba
-
-**Paling mudah – GitHub Pages (gratis, kamera HP berfungsi):**
-1. Di repo ini buka **Settings → Pages**.
-2. *Source*: **Deploy from a branch**, *Branch*: `main`, folder `/ (root)`, lalu **Save**.
-3. Tunggu ±1 menit, buka alamat yang muncul (mis. `https://namaakun.github.io/warehouse-4-keledai/`) dari HP.
-4. Pilih peran di bagian atas (**Masuk sebagai**) untuk berpindah dashboard.
-
-> GitHub Pages untuk repo **private** butuh paket GitHub berbayar. Alternatif gratis: buat repo public,
-> atau upload `index.html` ke Netlify/Vercel/Cloudflare Pages (drag & drop).
-
-**Di komputer:** unduh `index.html` lalu buka di Chrome. Kamera langsung butuh alamat `https://`, jadi
-di file lokal gunakan *Foto barcode / QR* atau ketik SKU.
-
-Data contoh tersimpan di browser masing-masing. Tombol **Reset data contoh** mengembalikannya ke awal.
+1. **Produk**: menu *Produk & label* → *Template produk* → isi di Excel (SKU, nama, brand, wajib ED, minimum, HPP, harga jual) → *Unggah produk*.
+2. **Stok awal**: *Template stok awal* → isi SKU, ED, jumlah hasil hitung fisik hari ini → *Unggah stok awal*.
+3. **Label**: isi jumlah label per produk → *Buat lembar label* → *Cetak label* → tempel di kardus/kemasan.
+   Label berisi QR kode SKU, jadi produk tanpa barcode pabrik tetap bisa di-scan.
+4. **Setiap hari**: staf input *Barang masuk* & *Barang keluar*. Tombol **Scan** → *Buka kamera* atau *Foto barcode/QR*,
+   atau cukup ketik sebagian SKU/nama.
+5. **Setiap minggu**: *Stock opname* → hitung semua barang → kirim → owner setujui.
+6. **Pembukuan**: *Export Excel* → pilih data & periode. File berisi lembar *Data* dan *Ringkasan* (jumlah baris & total kontrol).
 
 ## Struktur folder
 
 ```
-index.html                         Aplikasi demo (satu file, tanpa build)
-prototipe/
-  versi-lengkap-multigudang.html   Prototipe versi besar: multi gudang, rak, transfer antar kota
-supabase/
-  migrations/001_schema.sql        Tabel: produk, batch/ED, gudang, dokumen, pesanan, faktur
-  migrations/002_functions.sql     Logika stok (FEFO, scan, opname, approval, impor marketplace)
-  migrations/003_views.sql         Laporan & export untuk finance
-  migrations/004_security.sql      Hak akses per peran (RLS)
-  tests/                           105 skenario uji otomatis
+index.html                   Aplikasi (satu file, tanpa build) — dibuka lewat GitHub Pages
+config.js                    Alamat & kunci Supabase (isi di langkah 5)
+supabase/setup.sql           Database produksi — jalankan sekali di SQL Editor
+supabase/tests/              Uji otomatis database (run_tests.sh)
+supabase/migrations/         Versi lengkap multi gudang & rak (untuk nanti, belum dipakai)
+prototipe/                   Demo tanpa database & prototipe versi lengkap
 ```
 
-## Rencana ke produksi
+## Pengujian
 
-Database di `supabase/` sudah memenuhi aturan penting dan lolos 105 uji otomatis:
-stok tidak bisa minus, riwayat stok tidak bisa diedit/dihapus, impor pesanan tidak bisa dobel,
-selisih wajib disetujui orang lain, dan HPP tidak terbaca oleh peran yang tidak berhak.
+- `supabase/tests/run_tests.sh`: 76 pemeriksaan database (stok tidak minus, FEFO, persetujuan, stock opname,
+  HPP tidak bocor ke staf/sales, riwayat tidak bisa diubah, dll.). Butuh PostgreSQL 15+ lokal.
+- Aplikasi juga sudah diuji ujung-ke-ujung di Chromium terhadap PostgREST (komponen yang sama dengan Supabase):
+  daftar & aktivasi akun, impor Excel, barang masuk dengan foto, scan QR dari foto, barang keluar FEFO,
+  persetujuan, stock opname, export Excel (jumlah & total cocok dengan database), hak akses per peran.
 
-Langkah berikutnya:
-1. Buat project di [supabase.com](https://supabase.com) (gratis untuk mulai).
-2. Jalankan isi `supabase/migrations/001` s/d `004` berurutan di **SQL Editor**.
-3. Sambungkan tampilan aplikasi ke database (login per orang, data dibagi antar HP/laptop).
-4. Uji paralel 1–2 bulan bersama pencatatan lama sebelum dipakai penuh.
+## Catatan
 
-Database sudah mendukung multi gudang & rak; untuk tahap UMKM cukup pakai satu gudang dan satu lokasi.
-
-### Menjalankan uji database
-
-Butuh PostgreSQL 15+ lokal:
-
-```bash
-DB=keledai_test ./supabase/tests/run_tests.sh
-```
-
-## Data contoh
-
-Produk Zerodeo dan Depot Kimia diambil dari file master produk (nama, isi, SKU & HPP Depot Kimia).
-SKU/barcode/harga jual Zerodeo, nomor batch, ED, stok, pelanggan, dan pesanan adalah **contoh** dan perlu diganti data asli.
+- Foto bukti terima diperkecil otomatis (±50–100 KB) dan disimpan di database. Paket gratis Supabase (500 MB) cukup untuk ribuan foto.
+- Paket gratis Supabase akan **dijeda kalau tidak dipakai 7 hari**. Untuk pemakaian harian tidak masalah; untuk jaminan selalu aktif, gunakan paket Pro.
+- Cadangan data: Supabase → *Database* → *Backups*, atau rutin *Export Excel* kartu stok.
