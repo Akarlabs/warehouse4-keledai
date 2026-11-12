@@ -31,7 +31,7 @@ create table public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
   email       text,
   full_name   text,
-  role        text not null default 'staf' check (role in ('owner','staf','sales','finance')),
+  role        text not null default 'staf' check (role in ('owner','ops','staf','sales','finance')),
   active      boolean not null default false,
   created_at  timestamptz not null default now()
 );
@@ -51,6 +51,8 @@ create table public.products (
   cost        numeric(16,2) not null default 0 check (cost >= 0),
   price       numeric(16,2) not null default 0 check (price >= 0),
   active      boolean not null default true,
+  approved    boolean not null default true,   -- false = diajukan staf gudang, menunggu ACC
+  proposed_name text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -75,6 +77,15 @@ create table public.bundle_items (
   sku         text not null references public.products(sku) on update cascade,
   qty         numeric(14,3) not null check (qty > 0),
   primary key (bundle_sku, sku)
+);
+
+-- ID & password awal tim (hanya terlihat Owner). Password yang diganti sendiri oleh pengguna tidak disimpan.
+create table public.user_credentials (
+  user_id         uuid primary key references auth.users(id) on delete cascade,
+  login_id        text not null,
+  init_password   text,
+  changed_by_user boolean not null default false,
+  updated_at      timestamptz not null default now()
 );
 
 create table public.suppliers (
@@ -221,7 +232,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 create or replace function public.can_see_cost() returns boolean
 language sql stable security definer set search_path = public as $$
-  select coalesce(public.my_role() in ('owner','finance'), false)
+  select coalesce(public.my_role() in ('owner','ops','finance'), false)
 $$;
 create or replace function public._me_name() returns text
 language sql stable security definer set search_path = public as $$
@@ -233,8 +244,16 @@ begin
   if public.my_role() is null then
     raise exception 'Akun Anda belum aktif. Minta owner mengaktifkan di menu Pengguna.' using errcode = '42501';
   end if;
-  if not (public.my_role() = any(p_roles)) then
+  -- Head Operasional (ops) punya hak yang sama dengan Owner, kecuali urusan akun (lihat _require_owner)
+  if not (public.my_role() = any(p_roles) or (public.my_role() = 'ops' and 'owner' = any(p_roles))) then
     raise exception 'Akses ditolak: hanya untuk %', array_to_string(p_roles, ', ') using errcode = '42501';
+  end if;
+end $$;
+create or replace function public._require_owner() returns void
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if public.my_role() is distinct from 'owner' then
+    raise exception 'Akses ditolak: hanya untuk owner' using errcode = '42501';
   end if;
 end $$;
 create or replace function public._q(p numeric) returns text
@@ -272,7 +291,15 @@ begin
 end $$;
 
 create or replace function public._tg_immutable() returns trigger language plpgsql as $$
-begin raise exception 'Riwayat stok tidak boleh diubah atau dihapus'; end $$;
+begin
+  -- satu-satunya perubahan yang boleh: kode SKU ikut berganti saat produk ajuan dibetulkan kodenya
+  if tg_op = 'UPDATE' and new.sku is distinct from old.sku
+     and (new.at, new.ed, new.qty, new.kind, new.doc_no, new.note, new.by_id, new.by_name)
+         is not distinct from (old.at, old.ed, old.qty, old.kind, old.doc_no, old.note, old.by_id, old.by_name) then
+    return new;
+  end if;
+  raise exception 'Riwayat stok tidak boleh diubah atau dihapus';
+end $$;
 create trigger moves_no_update before update or delete on public.moves for each row execute function public._tg_immutable();
 create trigger moves_no_truncate before truncate on public.moves for each statement execute function public._tg_immutable();
 
@@ -330,7 +357,7 @@ create or replace function public.save_product(p jsonb) returns text
 language plpgsql security definer set search_path = public as $$
 declare v_sku text := upper(trim(p->>'sku')); v_bc text := nullif(trim(coalesce(p->>'barcode','')), '');
 begin
-  perform public._require('owner');
+  perform public._require('owner','finance');
   if v_sku is null or v_sku !~ '^[A-Z0-9._-]{2,40}$' then
     raise exception 'Kode SKU tidak valid: 2–40 huruf/angka/titik/minus, tanpa spasi';
   end if;
@@ -348,8 +375,63 @@ begin
           coalesce((p->>'cost')::numeric, 0), coalesce((p->>'price')::numeric, 0), coalesce((p->>'active')::boolean, true))
   on conflict (sku) do update set barcode = excluded.barcode, name = excluded.name, brand_code = excluded.brand_code,
       track_ed = excluded.track_ed, min_stock = excluded.min_stock, cost = excluded.cost, price = excluded.price,
-      active = excluded.active, updated_at = now();
+      active = excluded.active, approved = true, updated_at = now();
   return v_sku;
+end $$;
+
+-- Staf gudang mengajukan produk baru saat menerima barang (tanpa HPP). Perlu ACC Owner / Head Operasional / Finance.
+-- p: {sku, name, brand_code, track_ed}
+create or replace function public.propose_product(p jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_sku text := upper(trim(p->>'sku'));
+begin
+  perform public._require('owner','staf','finance');
+  if v_sku is null or v_sku !~ '^[A-Z0-9._-]{2,40}$' then
+    raise exception 'Kode SKU tidak valid: 2–40 huruf/angka/titik/minus, tanpa spasi';
+  end if;
+  if coalesce(trim(p->>'name'),'') = '' then raise exception 'Nama barang wajib diisi'; end if;
+  if exists (select 1 from public.products where sku = v_sku) then raise exception 'Kode % sudah dipakai', v_sku; end if;
+  if exists (select 1 from public.bundles where sku = v_sku) then raise exception 'Kode % sudah dipakai SKU bundling', v_sku; end if;
+  if not exists (select 1 from public.brands where code = upper(trim(p->>'brand_code'))) then
+    raise exception 'Brand % belum ada', p->>'brand_code';
+  end if;
+  insert into public.products (sku, name, brand_code, track_ed, approved, proposed_name)
+  values (v_sku, trim(p->>'name'), upper(trim(p->>'brand_code')), coalesce((p->>'track_ed')::boolean, true),
+          public.my_role() in ('owner','ops'), public._me_name());
+  return v_sku;
+end $$;
+
+-- ACC produk ajuan: boleh sekalian membetulkan kode SKU & nama, dan mengisi HPP / harga jual / minimum.
+-- p: {new_sku, name, cost, price, min_stock, track_ed}
+create or replace function public.approve_product(p_sku text, p jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_new text := upper(trim(coalesce(nullif(p->>'new_sku',''), p_sku)));
+begin
+  perform public._require('owner','finance');
+  if not exists (select 1 from public.products where sku = p_sku and not approved) then raise exception 'Produk % tidak menunggu ACC', p_sku; end if;
+  if v_new !~ '^[A-Z0-9._-]{2,40}$' then raise exception 'Kode SKU tidak valid'; end if;
+  if v_new <> p_sku and (exists (select 1 from public.products where sku = v_new) or exists (select 1 from public.bundles where sku = v_new)) then
+    raise exception 'Kode % sudah dipakai', v_new;
+  end if;
+  update public.products set sku = v_new, name = coalesce(nullif(trim(p->>'name'),''), name),
+         cost = coalesce((p->>'cost')::numeric, cost), price = coalesce((p->>'price')::numeric, price),
+         min_stock = coalesce((p->>'min_stock')::numeric, min_stock), track_ed = coalesce((p->>'track_ed')::boolean, track_ed),
+         approved = true, updated_at = now()
+   where sku = p_sku;
+  return v_new;
+end $$;
+
+-- Tolak produk ajuan (hanya kalau belum pernah ada stok masuk/keluar)
+create or replace function public.reject_product(p_sku text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._require('owner','finance');
+  if not exists (select 1 from public.products where sku = p_sku and not approved) then raise exception 'Produk % tidak menunggu ACC', p_sku; end if;
+  if exists (select 1 from public.moves where sku = p_sku) then
+    raise exception 'Barang ini sudah pernah masuk stok. Betulkan kodenya lalu ACC, jangan ditolak.';
+  end if;
+  delete from public.product_photos where sku = p_sku;
+  delete from public.products where sku = p_sku;
 end $$;
 
 -- Impor banyak produk sekaligus dari Excel. rows: [{sku,name,brand_code,track_ed,min_stock,cost,price,barcode}]
@@ -432,13 +514,10 @@ begin
     v_qty := (r->>'qty')::numeric;
     if v_qty is null or v_qty <= 0 then raise exception 'Jumlah % harus lebih dari 0', v_prod.sku; end if;
     v_ed := nullif(r->>'ed','')::date;
-    if v_prod.track_ed then
-      if v_ed is null then raise exception 'Tanggal ED wajib untuk % (%)', v_prod.name, v_prod.sku; end if;
-      if v_ed < public._today() and v_source <> 'saldo_awal' then
-        raise exception 'ED % untuk % sudah lewat. Periksa kemasan.', to_char(v_ed,'DD-MM-YYYY'), v_prod.sku;
-      end if;
-    else
-      v_ed := null;
+    -- ED wajib untuk produk personal care; untuk produk lain boleh diisi jika ada
+    if v_prod.track_ed and v_ed is null then raise exception 'Tanggal ED wajib untuk % (%)', v_prod.name, v_prod.sku; end if;
+    if v_ed is not null and v_ed < public._today() and v_source <> 'saldo_awal' then
+      raise exception 'ED % untuk % sudah lewat. Periksa kemasan.', to_char(v_ed,'DD-MM-YYYY'), v_prod.sku;
     end if;
     insert into public.inbound_lines (inbound_id, sku, ed, batch_no, qty)
     values (v_id, v_prod.sku, v_ed, nullif(upper(trim(r->>'batch_no')),''), v_qty);
@@ -497,7 +576,7 @@ begin
   if jsonb_typeof(p->'lines') <> 'array' or jsonb_array_length(p->'lines') = 0 then
     raise exception 'Belum ada barang di daftar';
   end if;
-  v_need_approval := v_purpose in ('sampel','rusak','internal','lainnya') and public.my_role() <> 'owner';
+  v_need_approval := v_purpose in ('sampel','rusak','internal','lainnya') and public.my_role() not in ('owner','ops');
   if v_purpose in ('sampel','rusak','internal','lainnya') and coalesce(trim(p->>'note'),'') = '' then
     raise exception 'Keterangan wajib diisi untuk barang keluar non-penjualan';
   end if;
@@ -663,19 +742,20 @@ end $$;
 create or replace function public.list_users() returns setof jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
-  perform public._require('owner');
-  return query select jsonb_build_object('id', id, 'email', email, 'full_name', full_name, 'role', role, 'active', active, 'created_at', created_at)
-    from public.profiles order by created_at;
+  perform public._require_owner();
+  return query select jsonb_build_object('id', p.id, 'email', p.email, 'full_name', p.full_name, 'role', p.role, 'active', p.active, 'created_at', p.created_at,
+                                         'login_id', c.login_id, 'init_password', c.init_password, 'changed_by_user', coalesce(c.changed_by_user, false))
+    from public.profiles p left join public.user_credentials c on c.user_id = p.id order by p.created_at;
 end $$;
 
 create or replace function public.update_user(p_id uuid, p_role text, p_active boolean, p_name text default null) returns void
 language plpgsql security definer set search_path = public as $$
 declare v_old public.profiles;
 begin
-  perform public._require('owner');
+  perform public._require_owner();
   select * into v_old from public.profiles where id = p_id for update;
   if not found then raise exception 'Pengguna tidak ditemukan'; end if;
-  if p_role not in ('owner','staf','sales','finance') then raise exception 'Peran tidak dikenal'; end if;
+  if p_role not in ('owner','ops','staf','sales','finance') then raise exception 'Peran tidak dikenal'; end if;
   if v_old.role = 'owner' and v_old.active and (p_role <> 'owner' or not p_active)
      and (select count(*) from public.profiles where role = 'owner' and active) <= 1 then
     raise exception 'Minimal harus ada satu owner aktif';
@@ -693,7 +773,7 @@ end $$;
 create or replace function public.save_settings(p_company text, p_warn int) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  perform public._require('owner');
+  perform public._require_owner();
   update public.settings set company_name = trim(p_company), warn_months = p_warn, updated_at = now() where id = 1;
 end $$;
 
@@ -713,8 +793,8 @@ create view public.v_suppliers with (security_barrier) as
 create view public.v_products with (security_barrier) as
   select p.sku, p.barcode, p.name, p.brand_code, b.name as brand_name, p.track_ed, p.min_stock,
          case when public.can_see_cost() then p.cost end as cost,
-         case when public.my_role() in ('owner','finance','sales') then p.price end as price,
-         p.active
+         case when public.my_role() in ('owner','ops','finance','sales') then p.price end as price,
+         p.active, p.approved, p.proposed_name
     from public.products p join public.brands b on b.code = p.brand_code
    where public.is_active();
 
@@ -748,7 +828,7 @@ create view public.v_stock with (security_barrier) as
          min(l.ed) filter (where l.qty > 0) as nearest_ed,
          coalesce(sum(l.qty), 0) < p.min_stock as below_min,
          case when public.can_see_cost() then round(coalesce(sum(l.qty), 0) * p.cost, 2) end as value,
-         case when public.my_role() in ('owner','finance','sales') then p.price end as price
+         case when public.my_role() in ('owner','ops','finance','sales') then p.price end as price
     from public.products p join public.brands b on b.code = p.brand_code
     left join public.lots l on l.sku = p.sku and l.qty > 0
    where public.is_active()
@@ -800,7 +880,7 @@ create view public.v_outbound_lines with (security_barrier) as
          coalesce((a->>'qty')::numeric, x.qty) as qty,
          case when public.can_see_cost() then p.cost end as hpp,
          case when public.can_see_cost() then round(coalesce((a->>'qty')::numeric, x.qty) * p.cost, 2) end as nilai_hpp,
-         case when public.my_role() in ('owner','finance','sales') then p.price end as harga_jual,
+         case when public.my_role() in ('owner','ops','finance','sales') then p.price end as harga_jual,
          o.created_name as diinput_oleh, o.decided_name as disetujui_oleh, o.note as keterangan
     from public.outbound_lines x join public.outbounds o on o.id = x.outbound_id
     join public.products p on p.sku = x.sku
@@ -889,6 +969,67 @@ begin
   return v_sku;
 end $$;
 
+-- ID & PASSWORD TIM (Owner)
+create or replace function public.save_credential(p_id uuid, p_login text, p_pass text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._require_owner();
+  if not exists (select 1 from public.profiles where id = p_id) then raise exception 'Pengguna tidak ditemukan'; end if;
+  insert into public.user_credentials (user_id, login_id, init_password) values (p_id, lower(trim(p_login)), p_pass)
+  on conflict (user_id) do update set login_id = excluded.login_id, init_password = excluded.init_password, changed_by_user = false, updated_at = now();
+end $$;
+
+create or replace function public.reset_password(p_id uuid, p_pass text) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_email text;
+begin
+  perform public._require_owner();
+  if p_id = auth.uid() then raise exception 'Password sendiri diganti lewat menu Akun saya'; end if;
+  if length(coalesce(p_pass,'')) < 8 then raise exception 'Password minimal 8 karakter'; end if;
+  select email into v_email from public.profiles where id = p_id;
+  if v_email is null then raise exception 'Pengguna tidak ditemukan'; end if;
+  update auth.users set encrypted_password = crypt(p_pass, gen_salt('bf')), updated_at = now() where id = p_id;
+  insert into public.user_credentials (user_id, login_id, init_password)
+  values (p_id, case when v_email like '%@4keledai.id' then split_part(v_email, '@', 1) else v_email end, p_pass)
+  on conflict (user_id) do update set init_password = excluded.init_password, changed_by_user = false, updated_at = now();
+end $$;
+
+-- Ganti ID login. Staf/sales/finance: ID pendek (jadi id@4keledai.id). Owner: email.
+-- Pengguna boleh mengganti ID sendiri; Owner boleh mengganti ID siapa saja.
+create or replace function public.change_login_id(p_id uuid, p_new text) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_new text := lower(trim(coalesce(p_new,''))); v_email text; v_role text;
+begin
+  if public.my_role() is null then raise exception 'Akun belum aktif'; end if;
+  if p_id <> auth.uid() then perform public._require_owner(); end if;
+  select role into v_role from public.profiles where id = p_id;
+  if v_role is null then raise exception 'Pengguna tidak ditemukan'; end if;
+  if v_new like '%@%' then
+    if v_new !~ '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$' then raise exception 'Format email tidak valid'; end if;
+    v_email := v_new;
+  else
+    if v_role = 'owner' then raise exception 'ID Owner harus berupa email'; end if;
+    if v_new !~ '^[a-z0-9._-]{3,30}$' then raise exception 'ID 3–30 huruf/angka, tanpa spasi'; end if;
+    v_email := v_new || '@4keledai.id';
+  end if;
+  if exists (select 1 from auth.users where lower(email) = v_email and id <> p_id) then raise exception 'ID % sudah dipakai', v_new; end if;
+  update auth.users set email = v_email, updated_at = now() where id = p_id;
+  if to_regclass('auth.identities') is not null then
+    execute 'update auth.identities set identity_data = jsonb_set(coalesce(identity_data, ''{}''::jsonb), ''{email}'', to_jsonb($1::text)) where user_id = $2 and provider = ''email'''
+      using v_email, p_id;
+  end if;
+  update public.profiles set email = v_email where id = p_id;
+  update public.user_credentials set login_id = case when v_email like '%@4keledai.id' then split_part(v_email, '@', 1) else v_email end, updated_at = now()
+   where user_id = p_id;
+  return case when v_email like '%@4keledai.id' then split_part(v_email, '@', 1) else v_email end;
+end $$;
+
+create or replace function public.mark_password_changed() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.user_credentials set init_password = null, changed_by_user = true, updated_at = now() where user_id = auth.uid();
+end $$;
+
 -- ---------------------------------------------------------------------
 -- HAK AKSES
 -- ---------------------------------------------------------------------
@@ -919,7 +1060,9 @@ grant execute on function
   public.so_start(text), public.so_save(uuid, jsonb), public.so_submit(uuid), public.so_set_reasons(uuid, jsonb),
   public.so_reopen(uuid), public.so_cancel(uuid), public.so_approve(uuid),
   public.list_users(), public.update_user(uuid, text, boolean, text), public.update_my_name(text),
-  public.save_settings(text, int), public.dashboard(), public.set_product_photo(text, text), public.save_bundle(jsonb)
+  public.save_settings(text, int), public.dashboard(), public.set_product_photo(text, text), public.save_bundle(jsonb),
+  public.save_credential(uuid, text, text), public.reset_password(uuid, text), public.mark_password_changed(),
+  public.change_login_id(uuid, text), public.propose_product(jsonb), public.approve_product(text, jsonb), public.reject_product(text)
 to authenticated;
 
 -- Brand awal (bisa diubah di aplikasi)

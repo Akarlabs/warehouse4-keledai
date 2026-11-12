@@ -83,7 +83,7 @@ select public.create_inbound(json_build_object('supplier_id', :'sup1', 'sj_no', 
     json_build_object('sku','WT-TCCA90-1KG','qty',110,'ed','2030-01-01')))::jsonb) as in1 \gset
 select test.eq(:'in1' ~ '^IN-\d{4}-0001$', true, 'nomor dokumen otomatis');
 select test.eq((select qty from public.v_stock where sku='ZDO-RO-MXF-40'), 156.000, 'stok roll on bertambah');
-select test.eq((select count(*) from public.v_lots where sku='WT-TCCA90-1KG' and ed is null), 1::bigint, 'produk tanpa ED: ED diabaikan');
+select test.eq((select count(*) from public.v_lots where sku='WT-TCCA90-1KG' and ed = '2030-01-01'), 1::bigint, 'produk non-personal care: ED opsional ikut tersimpan');
 select test.eq((select has_photo from public.v_inbounds where doc_no=:'in1'), true, 'foto bukti tersimpan');
 select test.eq(public.inbound_photo((select id from public.v_inbounds where doc_no=:'in1')), 'data:image/jpeg;base64,AAAA', 'foto bisa dibuka');
 select test.eq((select value::text from public.v_inbounds where doc_no=:'in1'), null, 'staf tidak melihat nilai barang masuk');
@@ -180,6 +180,76 @@ select public.save_bundle('{"sku":"ZDO-BDL-2RO","name":"Paket 2 Roll On + Kapori
 select test.login('staf@k4.id');
 select test.err($$select public.create_outbound('{"purpose":"shopee","lines":[{"sku":"ZDO-BDL-2RO","qty":1}]}')$$, 'tidak dikenal');
 select test.eq(((public.dashboard())->>'so_done_this_week')::boolean, true, 'dashboard tetap jalan');
+
+-- ---------- ID & password tim ----------
+select test.login('owner@k4.id');
+select public.save_credential(test.uid('staf@k4.id'), 'Staf', 'awal12345');
+select test.eq((select x->>'init_password' from public.list_users() x where x->>'email'='staf@k4.id'), 'awal12345', 'owner melihat password awal staf');
+select test.eq((select x->>'login_id' from public.list_users() x where x->>'email'='staf@k4.id'), 'staf', 'ID login tersimpan');
+select test.err(format($$select public.reset_password(%L, 'pendek')$$, test.uid('staf@k4.id')), 'minimal 8');
+select test.err(format($$select public.reset_password(%L, 'baru12345')$$, test.uid('owner@k4.id')), 'Akun saya');
+select public.reset_password(test.uid('staf@k4.id'), 'reset12345');
+reset role;
+select test.eq((select encrypted_password = crypt('reset12345', encrypted_password) from auth.users where email='staf@k4.id'), true, 'reset password mengubah password login');
+set role authenticated;
+select test.login('staf@k4.id');
+select test.err($$select public.list_users()$$, 'Akses ditolak');
+select test.err(format($$select public.save_credential(%L, 'x', 'y')$$, test.uid('staf@k4.id')), 'Akses ditolak');
+select test.err(format($$select public.reset_password(%L, 'hack12345')$$, test.uid('owner@k4.id')), 'Akses ditolak');
+select test.err($$select * from public.user_credentials$$, 'permission denied');
+select public.mark_password_changed();
+select test.login('owner@k4.id');
+select test.eq((select (x->>'changed_by_user')||'/'||coalesce(x->>'init_password','-') from public.list_users() x where x->>'email'='staf@k4.id'), 'true/-', 'password yang diganti sendiri tidak disimpan');
+
+-- ---------- Ganti ID ----------
+select test.login('staf@k4.id');
+select test.err(format($$select public.change_login_id(%L, 'curang')$$, test.uid('fin@k4.id')), 'Akses ditolak');
+select test.err(format($$select public.change_login_id(%L, 'a b')$$, test.uid('staf@k4.id')), 'tanpa spasi');
+select test.err(format($$select public.change_login_id(%L, 'fin@k4.id')$$, test.uid('staf@k4.id')), 'sudah dipakai');
+select test.eq(public.change_login_id(test.uid('staf@k4.id'), 'Gudang1'), 'gudang1', 'staf ganti ID sendiri');
+reset role;
+select test.eq((select email from auth.users where id = test.uid('gudang1@4keledai.id')), 'gudang1@4keledai.id', 'email login ikut berubah');
+set role authenticated;
+select test.login('owner@k4.id');
+select test.eq((select x->>'login_id' from public.list_users() x where x->>'email'='gudang1@4keledai.id'), 'gudang1', 'owner melihat ID baru');
+select test.err(format($$select public.change_login_id(%L, 'bos')$$, test.uid('owner@k4.id')), 'harus berupa email');
+select test.eq(public.change_login_id(test.uid('gudang1@4keledai.id'), 'staf@k4.id'), 'staf@k4.id', 'owner mengganti ID staf');
+
+-- ---------- Head Operasional ----------
+select test.login('owner@k4.id');
+select public.update_user(test.uid('baru@k4.id'), 'ops', true, 'Yanuar');
+select test.login('baru@k4.id');
+select test.eq(public.can_see_cost(), true, 'head operasional melihat HPP');
+select test.eq((select price from public.v_products where sku='ZDO-RO-MXF-40') > 0, true, 'head operasional melihat harga jual');
+select public.save_product('{"sku":"ZDO-RO-NEW-40","name":"Roll On Baru","brand_code":"ZDO","cost":9000,"price":25000}');
+select test.eq((select cost from public.v_products where sku='ZDO-RO-NEW-40'), 9000.00, 'head operasional tambah produk + HPP');
+select test.err($$select public.list_users()$$, 'hanya untuk owner');
+select test.err(format($$select public.reset_password(%L, 'abcd12345')$$, test.uid('staf@k4.id')), 'hanya untuk owner');
+select public.create_outbound('{"purpose":"sampel","note":"endorse","lines":[{"sku":"WT-TCCA90-1KG","qty":1}]}') as out4 \gset
+select test.eq((:'out4'::jsonb)->>'status', 'posted', 'head operasional: barang keluar sampel tanpa menunggu');
+
+-- ---------- Produk ajuan staf gudang ----------
+select test.login('staf@k4.id');
+select test.err($$select public.save_product('{"sku":"X-1","name":"x","brand_code":"ZDO"}')$$, 'Akses ditolak');
+select public.propose_product('{"sku":"dkm-soda-1kg","name":"Soda Api 1 kg","brand_code":"DKM","track_ed":false}');
+select test.eq((select approved::text||'/'||proposed_name from public.v_products where sku='DKM-SODA-1KG'), 'false/Mas Staf', 'produk ajuan menunggu ACC');
+select test.eq((select cost from public.v_products where sku='DKM-SODA-1KG'), null, 'staf tidak melihat HPP produk ajuan');
+select public.create_inbound('{"source":"lainnya","lines":[{"sku":"DKM-SODA-1KG","qty":12}]}');
+select test.err($$select public.approve_product('DKM-SODA-1KG', '{}')$$, 'Akses ditolak');
+select test.login('fin@k4.id');
+select test.err($$select public.reject_product('DKM-SODA-1KG')$$, 'sudah pernah masuk stok');
+select test.eq(public.approve_product('DKM-SODA-1KG', '{"new_sku":"DKM-NAOH-1KG","cost":15000,"price":30000}'), 'DKM-NAOH-1KG', 'finance ACC + betulkan kode');
+select test.eq((select qty from public.v_stock where sku='DKM-NAOH-1KG'), 12.000, 'stok ikut pindah ke kode baru');
+select test.eq((select count(*) from public.v_moves where sku='DKM-NAOH-1KG'), 1::bigint, 'riwayat ikut kode baru');
+select test.eq((select approved from public.v_products where sku='DKM-NAOH-1KG'), true, 'produk sudah ACC');
+select test.login('staf@k4.id');
+select public.propose_product('{"sku":"DKM-SALAH","name":"Salah ketik","brand_code":"DKM","track_ed":false}');
+select test.login('baru@k4.id');
+select public.reject_product('DKM-SALAH');
+select test.eq((select count(*) from public.v_products where sku='DKM-SALAH'), 0::bigint, 'head operasional menolak ajuan yang belum dipakai');
+reset role;
+select test.err($$update public.moves set qty = 2 where sku='DKM-NAOH-1KG'$$, 'tidak boleh diubah');
+set role authenticated;
 
 -- ---------- Integritas ----------
 reset role;
