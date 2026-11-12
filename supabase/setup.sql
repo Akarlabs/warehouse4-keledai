@@ -69,6 +69,8 @@ create table public.bundles (
   sku         text primary key check (sku ~ '^[A-Z0-9._-]{2,40}$'),
   name        text not null check (length(trim(name)) > 0),
   active      boolean not null default true,
+  created_name text,
+  updated_name text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -828,7 +830,8 @@ create view public.v_product_photos with (security_barrier) as
 create view public.v_bundles with (security_barrier) as
   select b.sku, b.name, b.active,
          coalesce((select jsonb_agg(jsonb_build_object('sku', i.sku, 'name', p.name, 'qty', i.qty) order by p.name)
-                     from public.bundle_items i join public.products p on p.sku = i.sku where i.bundle_sku = b.sku), '[]'::jsonb) as items
+                     from public.bundle_items i join public.products p on p.sku = i.sku where i.bundle_sku = b.sku), '[]'::jsonb) as items,
+         b.created_name, b.updated_name, b.created_at, b.updated_at
     from public.bundles b
    where public.is_active();
 
@@ -974,13 +977,13 @@ create or replace function public.save_bundle(p jsonb) returns text
 language plpgsql security definer set search_path = public as $$
 declare v_sku text := upper(trim(p->>'sku')); r jsonb; v_item text; v_n int := 0;
 begin
-  perform public._require('owner');
+  perform public._require('owner','sales');  -- Sales/Marketing membuat bundling sesuai SKU di Shopee/TikTok
   if v_sku is null or v_sku !~ '^[A-Z0-9._-]{2,40}$' then raise exception 'Kode SKU bundling tidak valid: 2–40 huruf/angka/titik/minus, tanpa spasi'; end if;
   if exists (select 1 from public.products where sku = v_sku) then raise exception 'Kode % sudah dipakai produk biasa', v_sku; end if;
   if coalesce(trim(p->>'name'),'') = '' then raise exception 'Nama bundling wajib diisi'; end if;
   if jsonb_typeof(p->'items') <> 'array' or jsonb_array_length(p->'items') = 0 then raise exception 'Isi bundling minimal 1 produk'; end if;
-  insert into public.bundles (sku, name, active) values (v_sku, trim(p->>'name'), coalesce((p->>'active')::boolean, true))
-  on conflict (sku) do update set name = excluded.name, active = excluded.active, updated_at = now();
+  insert into public.bundles (sku, name, active, created_name, updated_name) values (v_sku, trim(p->>'name'), coalesce((p->>'active')::boolean, true), public._me_name(), public._me_name())
+  on conflict (sku) do update set name = excluded.name, active = excluded.active, updated_name = excluded.updated_name, updated_at = now();
   delete from public.bundle_items where bundle_sku = v_sku;
   for r in select * from jsonb_array_elements(p->'items') loop
     v_item := upper(trim(r->>'sku'));

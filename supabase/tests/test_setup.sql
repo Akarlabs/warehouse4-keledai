@@ -260,6 +260,16 @@ reset role;
 select test.err($$update public.moves set qty = 2 where sku='DKM-NAOH-1KG'$$, 'tidak boleh diubah');
 set role authenticated;
 
+-- ---------- Sales membuat SKU bundling ----------
+select test.login('sales@k4.id');
+select public.save_bundle('{"sku":"SHP-PAKET-HEMAT","name":"Paket Hemat Shopee","items":[{"sku":"ZDO-RO-MXF-40","qty":3}]}');
+select test.eq((select created_name from public.v_bundles where sku='SHP-PAKET-HEMAT') is not null, true, 'sales membuat bundling, tercatat pembuatnya');
+select test.err($$select public.save_product('{"sku":"X-2","name":"x","brand_code":"ZDO"}')$$, 'Akses ditolak');
+select test.err($$select public.create_outbound('{"purpose":"shopee","lines":[{"sku":"SHP-PAKET-HEMAT","qty":1}]}')$$, 'Akses ditolak');
+select test.login('staf@k4.id');
+select public.create_outbound('{"purpose":"shopee","ref":"SHP-1","lines":[{"sku":"SHP-PAKET-HEMAT","qty":2}]}') as out5 \gset
+select test.eq((select (lines->0->>'qty')::numeric from public.v_outbounds where doc_no=(:'out5'::jsonb)->>'doc_no'), 6::numeric, 'bundling buatan sales memotong stok gudang (2 paket × 3)');
+
 -- ---------- Integritas ----------
 reset role;
 select test.eq((select count(*) from (select sku, ed, sum(qty) q from public.moves group by 1,2) m

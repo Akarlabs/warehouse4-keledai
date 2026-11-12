@@ -455,6 +455,7 @@ const V={};
 
 /* ---------------- BERANDA ---------------- */
 V.home=async()=>{
+  sel('v_bundles',x=>x.order('sku')).then(b=>{ const ch=JSON.stringify(b)!==JSON.stringify(G.bundles); G.bundles=b; if(ch&&G.view==='home') renderView(); }).catch(()=>{});
   const [d,lots,low,all]=await Promise.all([rpc('dashboard'),sel('v_lots',x=>x.in('ed_status',['kedaluwarsa','dekat']).order('ed').limit(40)),sel('v_stock',x=>x.eq('below_min',true).eq('active',true).order('sku').limit(40)),fetchAll('v_lots',null,['sku','ed'])]);
   const allF=all;
   const bySku={}; all.forEach(l=>{(bySku[l.sku]=bySku[l.sku]||[]).push(l)});
@@ -474,6 +475,7 @@ V.home=async()=>{
   if(d.so_open&&d.so_open.status==='submitted'&&is('owner')) todo.push(['so',`Stock opname ${d.so_open.doc_no} menunggu persetujuan`,'Periksa selisih & alasannya']);
   if(d.so_open&&d.so_open.status==='counting'&&is('owner','staf')) todo.push(['so',`Stock opname ${d.so_open.doc_no} sedang dihitung`,'Lanjutkan hitung lalu kirim']);
   if(!d.so_open&&!d.so_done_this_week&&is('owner','staf')) todo.push(['so',`Stock opname minggu ini (${d.so_week}) belum dilakukan`,'Hitung fisik semua barang, cocokkan dengan sistem']);
+  const recentB=G.bundles.filter(b=>b.updated_at&&(Date.now()-new Date(b.updated_at))<7*864e5&&b.updated_name!==(G.profile.full_name||'')); if(is('owner','staf','finance')&&recentB.length) todo.push(['produk',`${recentB.length} SKU bundling baru/diubah 7 hari terakhir`,recentB.slice(0,3).map(b=>`${b.sku} (${b.updated_name||b.created_name||'-'})`).join(', ')]);
   const pendP=G.products.filter(p=>p.approved===false).length; if(is('owner','finance')&&pendP) todo.push(['produk',`${pendP} barang baru menunggu ACC`,'Diajukan staf gudang: cek kode, isi HPP, lalu ACC']);
   if(is('owner','finance')&&d.unverified_in) todo.push(['masuk',`${d.unverified_in} barang masuk belum diverifikasi`,'Cocokkan dengan surat jalan & foto bukti']);
   const soB=d.so_done_this_week?'<span class="badge b-ok count">Selesai</span>':d.so_open?`<span class="badge b-warn count">${d.so_open.status==='submitted'?'Menunggu owner':'Sedang dihitung'}</span>`:'<span class="badge b-warn count">Belum mulai</span>';
@@ -485,6 +487,7 @@ V.home=async()=>{
   return `<div class="row between"><h1>${{owner:'Dashboard Owner',ops:'Dashboard Head Operasional',staf:'Dashboard Staf Gudang',sales:'Dashboard Sales / Marketplace',finance:'Dashboard Finance'}[role()]}</h1><button class="btn sm" data-act="go" data-v="home">Muat ulang</button></div>
   ${is('staf')?overview+tiles:tiles+stokTbl}
   ${is('owner','finance','staf')?excelPanel(true):''}
+  ${is('sales')?(()=>{ G.ui.stockMap={}; all.forEach(l=>{ if(l.ed_status!=='kedaluwarsa') G.ui.stockMap[l.sku]=num(G.ui.stockMap[l.sku])+num(l.qty); }); return bundleSection(); })():''}
   <div class="stats">
    <button class="stat" data-act="stat" data-k="in_today"><span>Masuk hari ini</span><b>${q(d.in_today)} pcs</b><small>Lihat rincian ›</small></button>
    <button class="stat" data-act="stat" data-k="out_today"><span>Keluar hari ini</span><b>${q(d.out_today)} pcs</b><small>Lihat rincian ›</small></button>
@@ -747,7 +750,7 @@ async function doExport(kind){ const k=G.ui.exk||'keluar', e=EXPORTS[k]; const f
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500); }
 
 /* ---------------- PRODUK & LABEL ---------------- */
-V.produk=async()=>{ const st=await sel('v_stock'); G.ui.stockMap={}; st.forEach(r=>G.ui.stockMap[r.sku]=r.qty); const ed=G.ui.edit; const lsel=G.ui.lsel||{}; const nL=Object.values(lsel).reduce((a,b)=>a+(+b||0),0);
+V.produk=async()=>{ const st=await sel('v_stock'); G.ui.stockMap={}; st.forEach(r=>G.ui.stockMap[r.sku]=r.sellable); const ed=G.ui.edit; const lsel=G.ui.lsel||{}; const nL=Object.values(lsel).reduce((a,b)=>a+(+b||0),0);
   return `<h1>Produk</h1><p class="muted">Setiap barang punya kode SKU. Staf cukup mengetik sebagian kode SKU atau nama barang, lalu memilih dari daftar.</p>
   ${pendingSection()}
   ${is('owner','finance','staf')?excelPanel():''}
@@ -817,16 +820,21 @@ function pendingSection(){ const P=G.products.filter(p=>p.approved===false); if(
      :`<tr><td class="code">${esc(p.sku)}</td><td>${esc(p.name)}</td><td class="small">${esc(p.proposed_name||'-')}</td></tr>`).join('')}</tbody></table></div></section>`; }
 function bundleSection(){ const bd=G.ui.bd; const stokOf=sku=>num(G.ui.stockMap?.[sku]);
   const canMake=b=>b.items.length?Math.floor(Math.min(...b.items.map(i=>stokOf(i.sku)/num(i.qty)))):0;
-  return `<section class="panel"><div class="row between"><h2>SKU bundling (${G.bundles.length})</h2>${is('owner')&&!bd?'<button class="btn tape" data-act="bd-new">+ Buat SKU bundling</button>':''}</div>
-   <p class="small muted">Untuk paket di marketplace, mis. "Paket 2 Roll On". Bundling tidak punya stok sendiri: saat keluar, stok isinya langsung berkurang. Pakai kode yang sama persis dengan SKU di Shopee/TikTok.</p>
+  return `<section class="panel"><div class="row between"><h2>SKU bundling (${G.bundles.length})</h2>${is('owner','sales')&&!bd?'<button class="btn tape" data-act="bd-new">+ Buat SKU bundling</button>':''}</div>
+   <p class="small muted">Untuk paket di marketplace, mis. "Paket 2 Roll On". Bundling tidak punya stok sendiri: saat keluar, stok isinya langsung berkurang.</p>
+   <details${is('sales')&&!G.bundles.length?' open':''}><summary class="small"><b>Alur: bundling di Shopee/TikTok → stok gudang</b></summary><ol class="steps small" style="margin-top:8px">
+    <li><span><b>Sales/Marketing</b> membuat produk bundling di Shopee/TikTok dan mengisi <b>SKU</b>-nya, mis. <span class="code">ZDO-BDL-2RO</span>.</span></li>
+    <li><span>Di sini klik <b>+ Buat SKU bundling</b>, isi <b>kode yang sama persis</b>, lalu isi paketnya: barang apa & berapa pcs per paket.</span></li>
+    <li><span><b>Gudang</b> mengunggah PDF resi → paket otomatis dipecah di <b>Daftar ambil barang</b> (mis. 3 paket × 2 roll on = 6 roll on) dan stok isinya berkurang saat disimpan.</span></li>
+    <li><span>Kolom <b>Stok cukup untuk</b> = berapa paket yang bisa dijual dari stok sekarang → pakai untuk mengisi stok listing di marketplace.</span></li></ol></details>
    ${bd?`<div class="panel" style="background:var(--paper)"><div class="grid"><label class="field"><span>Kode SKU bundling (sama dengan di marketplace)</span><input id="bd-code" value="${esc(bd.sku)}" ${bd.edit?'disabled':''} placeholder="mis. ZDO-BDL-2RO" autocapitalize="characters"></label>
      <label class="field"><span>Nama paket</span><input id="bd-name" value="${esc(bd.name)}" placeholder="mis. Paket 2 Roll On Max Fresh"></label></div>
      <div class="grid">${skuField('bd-sku','Isi paket: produk')}<label class="field"><span>Jumlah per paket (pcs)</span><input id="bd-qty" type="number" min="1" inputmode="numeric"></label></div>
      <div class="row"><button class="btn" data-act="bd-add">Tambah isi</button></div>
-     ${bd.items.length?`<div class="tbl"><table><tbody>${bd.items.map((it,i)=>`<tr><td><div class="pcell"><div class="pthumb">${prodPic(prod(it.sku))}</div><div>${esc(prod(it.sku)?.name||it.sku)}<div class="small muted code">${esc(it.sku)}</div></div></div></td><td class="n qty">${q(it.qty)} pcs</td><td><button class="btn ghost sm" data-act="bd-del" data-i="${i}">Hapus</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada isi paket.</div>'}
+     ${bd.items.length?`<div class="tbl"><table><tbody>${bd.items.map((it,i)=>`<tr><td><div class="pcell"><div class="pthumb">${prodPic(prod(it.sku))}</div><div>${esc(prod(it.sku)?.name||it.sku)}<div class="small muted code">${esc(it.sku)} · stok ${q(stokOf(it.sku))}</div></div></div></td><td class="n qty">${q(it.qty)} pcs</td><td><button class="btn ghost sm" data-act="bd-del" data-i="${i}">Hapus</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada isi paket.</div>'}
      <div class="row"><label class="chk"><input type="checkbox" id="bd-active" ${bd.active?'checked':''}> Aktif</label></div>
      <div class="row"><button class="btn primary" data-act="bd-save">Simpan bundling</button><button class="btn ghost" data-act="bd-cancel">Batal</button></div></div>`:''}
-   ${G.bundles.length?`<div class="tbl"><table><thead><tr><th>Bundling</th><th>Isi per paket</th><th class="n">Stok cukup untuk</th>${is('owner')?'<th></th>':''}</tr></thead><tbody>${G.bundles.map(b=>`<tr><td><b>${esc(b.name)}</b>${b.active?'':' <span class="badge b-neu">nonaktif</span>'}<div class="small muted code">${esc(b.sku)}</div></td><td class="small">${b.items.map(i=>`<div>${q(i.qty)} × ${esc(i.name)}</div>`).join('')}</td><td class="n qty">${q(canMake(b))} paket</td>${is('owner')?`<td><button class="btn sm" data-act="bd-edit" data-sku="${esc(b.sku)}">Ubah</button></td>`:''}</tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada SKU bundling.</div>'}</section>`; }
+   ${G.bundles.length?`<div class="tbl"><table><thead><tr><th>Bundling</th><th>Isi per paket</th><th class="n">Stok cukup untuk</th>${is('owner','sales')?'<th></th>':''}</tr></thead><tbody>${G.bundles.map(b=>`<tr><td><b>${esc(b.name)}</b>${b.active?'':' <span class="badge b-neu">nonaktif</span>'}<div class="small muted code">${esc(b.sku)}</div>${b.created_name?`<div class="small muted">dibuat ${esc(b.created_name)}${b.updated_name&&b.updated_name!==b.created_name?' · diubah '+esc(b.updated_name):''} · ${fdate(b.updated_at||b.created_at)}</div>`:''}</td><td class="small">${b.items.map(i=>`<div>${q(i.qty)} × ${esc(i.name)}</div>`).join('')}</td><td class="n qty">${q(canMake(b))} paket</td>${is('owner','sales')?`<td><button class="btn sm" data-act="bd-edit" data-sku="${esc(b.sku)}">Ubah</button></td>`:''}</tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada SKU bundling.</div>'}</section>`; }
 function labelSheet(){ const list=[]; Object.entries(G.ui.lsel||{}).forEach(([sku,n])=>{const p=prod(sku); for(let i=0;i<(+n||0);i++) if(p) list.push(p)});
   return `<section class="panel"><div class="row between"><h2>Lembar label (${list.length})</h2><button class="btn primary" data-act="lbl-print">Cetak label</button></div>
   <div id="print-area"><div class="labels">${list.map(p=>`<div class="label"><div class="qr" data-qr="${esc(p.sku)}"></div><div><b>${esc(p.sku)}</b><small>${esc(p.name)}</small><small>${esc(p.brand_name)}</small></div></div>`).join('')}</div></div></section>`; }
