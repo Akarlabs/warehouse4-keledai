@@ -55,6 +55,28 @@ create table public.products (
   updated_at  timestamptz not null default now()
 );
 
+-- Foto kemasan asli (kecil, diperkecil di HP sebelum diunggah)
+create table public.product_photos (
+  sku         text primary key references public.products(sku) on update cascade on delete cascade,
+  photo       text not null check (photo like 'data:image/%' and length(photo) < 400000),
+  updated_at  timestamptz not null default now()
+);
+
+-- SKU bundling marketplace: tidak punya stok sendiri, saat keluar dipecah jadi isinya
+create table public.bundles (
+  sku         text primary key check (sku ~ '^[A-Z0-9._-]{2,40}$'),
+  name        text not null check (length(trim(name)) > 0),
+  active      boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create table public.bundle_items (
+  bundle_sku  text not null references public.bundles(sku) on update cascade on delete cascade,
+  sku         text not null references public.products(sku) on update cascade,
+  qty         numeric(14,3) not null check (qty > 0),
+  primary key (bundle_sku, sku)
+);
+
 create table public.suppliers (
   id          uuid primary key default gen_random_uuid(),
   name        text not null unique check (length(trim(name)) > 0),
@@ -147,7 +169,8 @@ create table public.outbounds (
   decided_by     uuid,
   decided_name   text,
   decided_at     timestamptz,
-  decided_note   text
+  decided_note   text,
+  bundles        jsonb   -- [{sku,name,qty}] SKU bundling yang dipecah di dokumen ini
 );
 create index on public.outbounds (doc_date);
 create index on public.outbounds (status);
@@ -312,6 +335,7 @@ begin
     raise exception 'Kode SKU tidak valid: 2–40 huruf/angka/titik/minus, tanpa spasi';
   end if;
   if coalesce(trim(p->>'name'),'') = '' then raise exception 'Nama produk wajib diisi'; end if;
+  if exists (select 1 from public.bundles where sku = v_sku) then raise exception 'Kode % sudah dipakai SKU bundling', v_sku; end if;
   if not exists (select 1 from public.brands where code = upper(trim(p->>'brand_code'))) then
     raise exception 'Brand % belum ada', p->>'brand_code';
   end if;
@@ -465,8 +489,8 @@ end $$;
 create or replace function public.create_outbound(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_id uuid; v_no text; r jsonb; v_prod public.products; v_qty numeric;
-  v_purpose text := p->>'purpose'; v_need_approval boolean; v_skus text[] := '{}';
+  v_id uuid; v_no text; r jsonb; v_qty numeric; v_code text; bi public.bundle_items;
+  v_purpose text := p->>'purpose'; v_need_approval boolean; v_map jsonb := '{}'; v_bund jsonb := '[]';
 begin
   perform public._require('owner','staf');
   if v_purpose is null then raise exception 'Pilih tujuan barang keluar'; end if;
@@ -478,23 +502,35 @@ begin
     raise exception 'Keterangan wajib diisi untuk barang keluar non-penjualan';
   end if;
 
+  -- Pecah SKU bundling jadi isinya, gabungkan SKU yang sama
+  for r in select * from jsonb_array_elements(p->'lines') loop
+    v_code := upper(trim(r->>'sku')); v_qty := (r->>'qty')::numeric;
+    if v_qty is null or v_qty <= 0 then raise exception 'Jumlah % harus lebih dari 0', v_code; end if;
+    if exists (select 1 from public.products where sku = v_code) then
+      v_map := v_map || jsonb_build_object(v_code, coalesce((v_map->>v_code)::numeric, 0) + v_qty);
+    elsif exists (select 1 from public.bundles where sku = v_code and active) then
+      if not exists (select 1 from public.bundle_items where bundle_sku = v_code) then raise exception 'SKU bundling % belum punya isi', v_code; end if;
+      for bi in select * from public.bundle_items where bundle_sku = v_code loop
+        v_map := v_map || jsonb_build_object(bi.sku, coalesce((v_map->>bi.sku)::numeric, 0) + bi.qty * v_qty);
+      end loop;
+      v_bund := v_bund || jsonb_build_array(jsonb_build_object('sku', v_code, 'name', (select name from public.bundles where sku = v_code), 'qty', v_qty));
+    else
+      raise exception 'SKU % tidak dikenal', r->>'sku';
+    end if;
+  end loop;
+
   v_no := public._next_no('OUT');
-  insert into public.outbounds (doc_no, doc_date, purpose, ref, customer, note, status, created_by, created_name)
+  insert into public.outbounds (doc_no, doc_date, purpose, ref, customer, note, status, created_by, created_name, bundles)
   values (v_no, coalesce((p->>'doc_date')::date, public._today()), v_purpose, nullif(trim(p->>'ref'),''),
           nullif(trim(p->>'customer'),''), nullif(trim(p->>'note'),''),
-          case when v_need_approval then 'pending' else 'posted' end, auth.uid(), public._me_name())
+          case when v_need_approval then 'pending' else 'posted' end, auth.uid(), public._me_name(),
+          case when jsonb_array_length(v_bund) > 0 then v_bund end)
   returning id into v_id;
 
-  for r in select * from jsonb_array_elements(p->'lines') loop
-    select * into v_prod from public.products where sku = upper(trim(r->>'sku'));
-    if not found then raise exception 'SKU % tidak dikenal', r->>'sku'; end if;
-    if v_prod.sku = any(v_skus) then raise exception 'SKU % tercantum dua kali, gabungkan jumlahnya', v_prod.sku; end if;
-    v_skus := v_skus || v_prod.sku;
-    v_qty := (r->>'qty')::numeric;
-    if v_qty is null or v_qty <= 0 then raise exception 'Jumlah % harus lebih dari 0', v_prod.sku; end if;
-    insert into public.outbound_lines (outbound_id, sku, qty) values (v_id, v_prod.sku, v_qty);
+  for v_code, v_qty in select key, value::numeric from jsonb_each_text(v_map) order by key loop
+    insert into public.outbound_lines (outbound_id, sku, qty) values (v_id, v_code, v_qty);
     -- cek ketersediaan sekarang juga (termasuk untuk yang menunggu persetujuan)
-    perform 1 from public._plan_out(v_prod.sku, v_qty, v_purpose = 'rusak');
+    perform 1 from public._plan_out(v_code, v_qty, v_purpose = 'rusak');
   end loop;
 
   if not v_need_approval then perform public._post_outbound(v_id); end if;
@@ -682,6 +718,16 @@ create view public.v_products with (security_barrier) as
     from public.products p join public.brands b on b.code = p.brand_code
    where public.is_active();
 
+create view public.v_product_photos with (security_barrier) as
+  select sku, photo from public.product_photos where public.is_active();
+
+create view public.v_bundles with (security_barrier) as
+  select b.sku, b.name, b.active,
+         coalesce((select jsonb_agg(jsonb_build_object('sku', i.sku, 'name', p.name, 'qty', i.qty) order by p.name)
+                     from public.bundle_items i join public.products p on p.sku = i.sku where i.bundle_sku = b.sku), '[]'::jsonb) as items
+    from public.bundles b
+   where public.is_active();
+
 create view public.v_lots with (security_barrier) as
   select l.sku, p.name, p.brand_code, l.ed, l.qty,
          (l.ed - public._today()) as days_left,
@@ -737,7 +783,7 @@ create view public.v_inbound_lines with (security_barrier) as
    where public.is_active();
 
 create view public.v_outbounds with (security_barrier) as
-  select o.id, o.doc_no, o.doc_date, o.purpose, o.ref, o.customer, o.note, o.status, o.created_name, o.created_at,
+  select o.id, o.doc_no, o.doc_date, o.purpose, o.ref, o.customer, o.note, o.status, o.created_name, o.created_at, o.bundles,
          o.decided_name, o.decided_at, o.decided_note,
          (select sum(qty) from public.outbound_lines x where x.outbound_id = o.id) as total_qty,
          (select string_agg(public._q(x.qty) || ' × ' || p.name, chr(10) order by p.name) from public.outbound_lines x join public.products p on p.sku = x.sku where x.outbound_id = o.id) as items,
@@ -807,6 +853,42 @@ begin
   );
 end $$;
 
+-- FOTO KEMASAN & SKU BUNDLING
+create or replace function public.set_product_photo(p_sku text, p_photo text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._require('owner');
+  if not exists (select 1 from public.products where sku = upper(trim(p_sku))) then raise exception 'SKU % tidak dikenal', p_sku; end if;
+  if p_photo is null or p_photo = '' then delete from public.product_photos where sku = upper(trim(p_sku)); return; end if;
+  if length(p_photo) >= 400000 then raise exception 'Foto terlalu besar'; end if;
+  insert into public.product_photos (sku, photo) values (upper(trim(p_sku)), p_photo)
+  on conflict (sku) do update set photo = excluded.photo, updated_at = now();
+end $$;
+
+-- p: {sku, name, active, items:[{sku, qty}]}
+create or replace function public.save_bundle(p jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_sku text := upper(trim(p->>'sku')); r jsonb; v_item text; v_n int := 0;
+begin
+  perform public._require('owner');
+  if v_sku is null or v_sku !~ '^[A-Z0-9._-]{2,40}$' then raise exception 'Kode SKU bundling tidak valid: 2–40 huruf/angka/titik/minus, tanpa spasi'; end if;
+  if exists (select 1 from public.products where sku = v_sku) then raise exception 'Kode % sudah dipakai produk biasa', v_sku; end if;
+  if coalesce(trim(p->>'name'),'') = '' then raise exception 'Nama bundling wajib diisi'; end if;
+  if jsonb_typeof(p->'items') <> 'array' or jsonb_array_length(p->'items') = 0 then raise exception 'Isi bundling minimal 1 produk'; end if;
+  insert into public.bundles (sku, name, active) values (v_sku, trim(p->>'name'), coalesce((p->>'active')::boolean, true))
+  on conflict (sku) do update set name = excluded.name, active = excluded.active, updated_at = now();
+  delete from public.bundle_items where bundle_sku = v_sku;
+  for r in select * from jsonb_array_elements(p->'items') loop
+    v_item := upper(trim(r->>'sku'));
+    if not exists (select 1 from public.products where sku = v_item) then raise exception 'SKU % tidak dikenal', r->>'sku'; end if;
+    if coalesce((r->>'qty')::numeric, 0) <= 0 then raise exception 'Jumlah % harus lebih dari 0', v_item; end if;
+    insert into public.bundle_items (bundle_sku, sku, qty) values (v_sku, v_item, (r->>'qty')::numeric)
+    on conflict (bundle_sku, sku) do update set qty = public.bundle_items.qty + excluded.qty;
+    v_n := v_n + 1;
+  end loop;
+  return v_sku;
+end $$;
+
 -- ---------------------------------------------------------------------
 -- HAK AKSES
 -- ---------------------------------------------------------------------
@@ -826,7 +908,7 @@ alter default privileges in schema public revoke execute on functions from publi
 grant usage on schema public to authenticated;
 grant select on public.v_settings, public.v_brands, public.v_suppliers, public.v_products, public.v_lots, public.v_stock,
                 public.v_moves, public.v_inbounds, public.v_inbound_lines, public.v_outbounds, public.v_outbound_lines,
-                public.v_opnames, public.v_opname_lines
+                public.v_opnames, public.v_opname_lines, public.v_product_photos, public.v_bundles
    to authenticated;
 
 grant execute on function
@@ -837,7 +919,7 @@ grant execute on function
   public.so_start(text), public.so_save(uuid, jsonb), public.so_submit(uuid), public.so_set_reasons(uuid, jsonb),
   public.so_reopen(uuid), public.so_cancel(uuid), public.so_approve(uuid),
   public.list_users(), public.update_user(uuid, text, boolean, text), public.update_my_name(text),
-  public.save_settings(text, int), public.dashboard()
+  public.save_settings(text, int), public.dashboard(), public.set_product_photo(text, text), public.save_bundle(jsonb)
 to authenticated;
 
 -- Brand awal (bisa diubah di aplikasi)

@@ -55,14 +55,12 @@ Export Excel data masuk/keluar/kartu stok  ──►  pembukuan (Accurate, dll.)
 
 ## Mulai memakai
 
-1. **Produk**: menu *Produk & label* → *Template produk* → isi di Excel (SKU, nama, brand, wajib ED, minimum, HPP, harga jual) → *Unggah produk*.
+1. **Produk**: menu *Produk* → *Template produk* → isi di Excel (SKU, nama, brand, wajib ED, minimum, HPP, harga jual) → *Unggah produk*.
 2. **Stok awal**: *Template stok awal* → isi SKU, ED, jumlah hasil hitung fisik hari ini → *Unggah stok awal*.
-3. **Label**: isi jumlah label per produk → *Buat lembar label* → *Cetak label* → tempel di kardus/kemasan.
-   Label berisi QR kode SKU, jadi produk tanpa barcode pabrik tetap bisa di-scan.
-4. **Setiap hari**: staf input *Barang masuk* & *Barang keluar*. Tombol **Scan** → *Buka kamera* atau *Foto barcode/QR*,
-   atau cukup ketik sebagian SKU/nama.
-5. **Setiap minggu**: *Stock opname* → hitung semua barang → kirim → owner setujui.
-6. **Pembukuan**: *Export Excel* → pilih data & periode. File berisi lembar *Data* dan *Ringkasan* (jumlah baris & total kontrol).
+3. **Setiap hari**: staf input *Barang masuk* & *Barang keluar* dengan mengetik sebagian kode SKU / nama barang lalu memilih dari daftar.
+   Barang keluar juga bisa dari **PDF resi** marketplace, dan **SKU bundling** langsung memotong stok isinya.
+4. **Setiap minggu**: *Stock opname* → hitung semua barang → kirim → owner setujui.
+5. **Pembukuan**: *Export Excel* → pilih data & periode. File berisi lembar *Data* dan *Ringkasan* (jumlah baris & total kontrol).
 
 ## Struktur folder
 

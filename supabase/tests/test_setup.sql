@@ -104,7 +104,7 @@ select test.eq((:'out1'::jsonb)->>'status', 'posted', 'penjualan langsung mengur
 select test.eq((select string_agg(ed::text||':'||trim_scale(qty)::text, ',' order by ed) from public.v_outbound_lines where doc_no=(:'out1'::jsonb)->>'doc_no'), '2026-12-20:36,2029-09-30:4', 'FEFO: ED terdekat keluar dulu');
 select test.eq((select qty from public.v_stock where sku='ZDO-RO-MXF-40'), 116.000, 'sisa roll on');
 select test.err($$select public.create_outbound('{"purpose":"tokopedia","lines":[{"sku":"ZDO-BM-CHM-75","qty":45}]}')$$, 'kurang 5 \(stok kedaluwarsa tidak boleh dijual');
-select test.err($$select public.create_outbound('{"purpose":"tokopedia","lines":[{"sku":"WT-TCCA90-1KG","qty":1},{"sku":"WT-TCCA90-1KG","qty":1}]}')$$, 'dua kali');
+select test.err($$select public.create_outbound('{"purpose":"tokopedia","lines":[{"sku":"WT-TCCA90-1KG","qty":1},{"sku":"WT-TCCA90-1KG","qty":500}]}')$$, 'tidak cukup');
 select test.eq((select qty from public.v_stock where sku='WT-TCCA90-1KG'), 110.000, 'transaksi gagal tidak mengubah stok');
 select test.err($$select public.create_outbound('{"purpose":"rusak","lines":[{"sku":"ZDO-BM-CHM-75","qty":8}]}')$$, 'Keterangan wajib');
 select public.create_outbound('{"purpose":"rusak","note":"Kedaluwarsa Sep 2026, dibuang","lines":[{"sku":"ZDO-BM-CHM-75","qty":8}]}') as out2 \gset
@@ -148,6 +148,38 @@ select test.eq((select qty from public.v_stock where sku='ZDO-RO-MXF-40'), 113.0
 select test.eq((select qty from public.v_stock where sku='WT-TCCA90-1KG'), 112.000, 'SO kelebihan ditambahkan');
 select test.eq((select diff_value from public.v_opnames where id=:'so1'), 24046.00, 'nilai selisih SO (owner)');
 select test.eq(((public.dashboard())->>'so_done_this_week')::boolean, true, 'dashboard: SO minggu ini selesai');
+
+-- ---------- Foto kemasan ----------
+select test.login('staf@k4.id');
+select test.err($$select public.set_product_photo('ZDO-RO-MXF-40', 'data:image/jpeg;base64,AAAA')$$, 'Akses ditolak');
+select test.login('owner@k4.id');
+select public.set_product_photo('ZDO-RO-MXF-40', 'data:image/jpeg;base64,AAAA');
+select test.err($$select public.set_product_photo('ZDO-RO-MXF-40', 'bukan gambar')$$, 'check');
+select test.err($$select public.set_product_photo('TIDAK-ADA', 'data:image/jpeg;base64,AAAA')$$, 'tidak dikenal');
+select test.login('staf@k4.id');
+select test.eq((select count(*) from public.v_product_photos), 1::bigint, 'staf bisa melihat foto kemasan');
+
+-- ---------- SKU bundling ----------
+select test.err($$select public.save_bundle('{"sku":"ZDO-BDL-2RO","name":"Paket 2 Roll On","items":[{"sku":"ZDO-RO-MXF-40","qty":2}]}')$$, 'Akses ditolak');
+select test.login('owner@k4.id');
+select public.save_bundle('{"sku":"zdo-bdl-2ro","name":"Paket 2 Roll On + Kaporit","items":[{"sku":"ZDO-RO-MXF-40","qty":2},{"sku":"WT-TCCA90-1KG","qty":1}]}');
+select test.err($$select public.save_bundle('{"sku":"ZDO-RO-MXF-40","name":"x","items":[{"sku":"WT-TCCA90-1KG","qty":1}]}')$$, 'dipakai produk');
+select test.err($$select public.save_product('{"sku":"ZDO-BDL-2RO","name":"x","brand_code":"ZDO"}')$$, 'dipakai SKU bundling');
+select test.err($$select public.save_bundle('{"sku":"ZDO-BDL-X","name":"x","items":[]}')$$, 'minimal 1');
+select test.eq((select jsonb_array_length(items) from public.v_bundles where sku='ZDO-BDL-2RO'), 2, 'bundling tersimpan dengan 2 isi');
+select test.login('staf@k4.id');
+select public.create_outbound('{"purpose":"shopee","ref":"BDL-1","lines":[{"sku":"ZDO-BDL-2RO","qty":3},{"sku":"ZDO-RO-MXF-40","qty":1}]}') as out3 \gset
+select test.eq((select qty from public.v_stock where sku='ZDO-RO-MXF-40'), 106.000, 'bundling: roll on berkurang 3×2 + 1 = 7');
+select test.eq((select qty from public.v_stock where sku='WT-TCCA90-1KG'), 109.000, 'bundling: kaporit berkurang 3×1');
+select test.eq((select jsonb_array_length(lines) from public.v_outbounds where doc_no=(:'out3'::jsonb)->>'doc_no'), 2, 'baris digabung per SKU');
+select test.eq((select bundles->0->>'sku' from public.v_outbounds where doc_no=(:'out3'::jsonb)->>'doc_no'), 'ZDO-BDL-2RO', 'dokumen mencatat SKU bundling');
+select test.err($$select public.create_outbound('{"purpose":"shopee","lines":[{"sku":"ZDO-BDL-2RO","qty":100}]}')$$, 'tidak cukup');
+select test.eq((select qty from public.v_stock where sku='WT-TCCA90-1KG'), 109.000, 'bundling gagal tidak mengubah stok');
+select test.login('owner@k4.id');
+select public.save_bundle('{"sku":"ZDO-BDL-2RO","name":"Paket 2 Roll On + Kaporit","active":false,"items":[{"sku":"ZDO-RO-MXF-40","qty":2}]}');
+select test.login('staf@k4.id');
+select test.err($$select public.create_outbound('{"purpose":"shopee","lines":[{"sku":"ZDO-BDL-2RO","qty":1}]}')$$, 'tidak dikenal');
+select test.eq(((public.dashboard())->>'so_done_this_week')::boolean, true, 'dashboard tetap jalan');
 
 -- ---------- Integritas ----------
 reset role;
