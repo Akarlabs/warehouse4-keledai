@@ -270,6 +270,40 @@ select test.login('staf@k4.id');
 select public.create_outbound('{"purpose":"shopee","ref":"SHP-1","lines":[{"sku":"SHP-PAKET-HEMAT","qty":2}]}') as out5 \gset
 select test.eq((select (lines->0->>'qty')::numeric from public.v_outbounds where doc_no=(:'out5'::jsonb)->>'doc_no'), 6::numeric, 'bundling buatan sales memotong stok gudang (2 paket × 3)');
 
+-- ---------- Tracker pesanan / resi ----------
+select test.login('sales@k4.id');
+select test.eq((public.submit_orders('[{"ref":"26aa01","resi_no":"JNE001","platform":"shopee","customer":"Budi","deadline":"2020-01-01","items":[{"sku":"WT-TCCA90-1KG","qty":2}]},{"ref":"26AA02","platform":"tiktok","items":[{"sku":"","raw":"KODE-ANEH","qty":1}]}]', true))->>'baru', '2', 'sales kirim 2 pesanan ke gudang');
+select test.eq((select string_agg(status||'/'||created_role, ',' order by ref) from public.v_orders where ref in ('26AA01','26AA02')), 'baru/sales,baru/sales', 'pesanan dari sales berstatus perlu diproses (bukan "disiapkan")');
+select test.eq((select late from public.v_orders where ref='26AA01'), true, 'lewat batas kirim ditandai');
+select test.eq((select count(*) from public.v_orders where search like '%jne001%'), 1::bigint, 'bisa dicari dari no. resi');
+select test.err($$select public.orders_start(array['26AA01'])$$, 'Akses ditolak');
+select test.login('staf@k4.id');
+select test.eq((public.submit_orders('[{"ref":"26AA01","platform":"shopee","items":[{"sku":"WT-TCCA90-1KG","qty":2}]},{"ref":"26AA03","platform":"shopee","items":[{"sku":"WT-TCCA90-1KG","qty":1}]}]', true))::text ~ '"baru": 1' , true, 'gudang upload: yang sudah diinput sales tidak dobel');
+select test.eq((select string_agg(status||'/'||created_role, ',' order by ref) from public.v_orders where ref in ('26AA01','26AA03')), 'proses/sales,proses/staf', 'gudang mulai menyiapkan → status proses');
+select public.create_outbound('{"purpose":"shopee","ref":"26aa01","lines":[{"sku":"WT-TCCA90-1KG","qty":2}]}') as out6 \gset
+select test.eq((select status||'/'||out_doc_no from public.v_orders where ref='26AA01'), 'selesai/'||((:'out6'::jsonb)->>'doc_no'), 'barang keluar → pesanan selesai + no. dokumen');
+select test.err($$select public.create_outbound('{"purpose":"shopee","ref":"26AA01","lines":[{"sku":"WT-TCCA90-1KG","qty":2}]}')$$, 'sudah dikeluarkan');
+select test.login('sales@k4.id');
+select test.eq((public.submit_orders('[{"ref":"26AA01","platform":"shopee","items":[{"sku":"WT-TCCA90-1KG","qty":2}]}]'))->'sudah'->0->>'status', 'selesai', 'sales diberi tahu: sudah keluar');
+select test.eq((public.submit_orders('[{"ref":"SHP-1","platform":"shopee","items":[{"sku":"WT-TCCA90-1KG","qty":2}]}]'))->'sudah'->0->>'status', 'selesai', 'pesanan yang sudah keluar lewat input manual juga terdeteksi');
+select test.err($$select public.order_cancel('26AA02', '')$$, 'alasan');
+select public.order_cancel('26aa02', 'Pembeli batal');
+select test.login('staf@k4.id');
+select test.err($$select public.create_outbound('{"purpose":"tiktok","ref":"26AA02","lines":[{"sku":"WT-TCCA90-1KG","qty":1}]}')$$, 'sudah dibatalkan');
+select test.err($$select public.order_cancel('26AA01', 'x')$$, 'tidak bisa dibatalkan');
+select public.order_reopen('26AA02');
+select test.eq((select status from public.v_orders where ref='26AA02'), 'baru', 'pesanan batal diaktifkan lagi');
+select test.eq(public.orders_start(array['26AA02']), 1, 'gudang mulai siapkan pesanan sales');
+select test.login('fin@k4.id');
+select test.err($$select public.submit_orders('[{"ref":"X1","platform":"shopee","items":[{"sku":"A","qty":1}]}]')$$, 'Akses ditolak');
+select test.eq((select count(*) from public.v_orders) >= 3, true, 'finance bisa memantau tracker');
+
+-- ---------- Bundling dari Excel ----------
+select test.login('sales@k4.id');
+select test.eq(public.save_bundles('[{"sku":"SHP-B1","name":"Paket B1","items":[{"sku":"ZDO-RO-MXF-40","qty":2},{"sku":"WT-TCCA90-1KG","qty":1}]},{"sku":"SHP-B2","name":"Paket B2","items":[{"sku":"ZDO-RO-MXF-40","qty":4}]}]'), 2, 'sales unggah 2 bundling sekaligus');
+select test.err($$select public.save_bundles('[{"sku":"SHP-B3","name":"x","items":[{"sku":"TIDAK-ADA","qty":1}]}]')$$, 'Bundling SHP-B3');
+select test.eq((select count(*) from public.v_bundles where sku='SHP-B3'), 0::bigint, 'bundling gagal tidak tersimpan sebagian');
+
 -- ---------- Integritas ----------
 reset role;
 select test.eq((select count(*) from (select sku, ed, sum(qty) q from public.moves group by 1,2) m

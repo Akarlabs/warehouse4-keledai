@@ -62,6 +62,14 @@ Export Excel data masuk/keluar/kartu stok  ──►  pembukuan (Accurate, dll.)
 4. **Setiap minggu**: *Stock opname* → hitung semua barang → kirim → owner setujui.
 5. **Pembukuan**: *Export Excel* → pilih data & periode. File berisi lembar *Data* dan *Ringkasan* (jumlah baris & total kontrol).
 
+## Tracker resi & bundling
+
+- **Tracker resi**: setiap PDF resi yang diunggah Sales (menu *Tracker resi*) atau Gudang (menu *Barang keluar*) tercatat sebagai satu pesanan.
+  Status: *Perlu diproses* → *Sedang disiapkan gudang* → *Sudah keluar*. Satu no. pesanan hanya bisa tercatat dan keluar sekali;
+  divisi yang mengunggah belakangan diberi tahu siapa yang sudah menginput dan sampai mana prosesnya.
+- **Antrean gudang**: pesanan dari Sales muncul di *Barang keluar → Pesanan menunggu diproses*; gudang cukup klik *Siapkan*, cek daftar ambil, simpan.
+- **SKU bundling**: dibuat Sales/Owner satu per satu atau lewat *template Excel bundling* (1 baris = 1 barang isi paket).
+
 ## Struktur folder
 
 ```

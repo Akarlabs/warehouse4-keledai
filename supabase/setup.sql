@@ -197,6 +197,25 @@ create table public.outbound_lines (
 );
 create index on public.outbound_lines (outbound_id);
 
+-- Antrean & tracker pesanan (resi). Diinput Sales ATAU Gudang dari PDF resi; satu no. pesanan hanya sekali.
+-- baru = perlu diproses gudang, proses = sedang disiapkan gudang, selesai = stok sudah keluar, batal = dibatalkan
+create table public.orders (
+  id            uuid primary key default gen_random_uuid(),
+  ref           text not null unique,            -- no. pesanan (huruf besar)
+  resi_no       text,
+  platform      text not null check (platform in ('shopee','tiktok','tokopedia','lazada','website','b2b','offline')),
+  customer      text,
+  deadline      date,                            -- batas kirim
+  items         jsonb not null default '[]',     -- [{sku, raw, qty}] sku boleh kosong kalau kode belum terdaftar
+  status        text not null default 'baru' check (status in ('baru','proses','selesai','batal')),
+  created_by    uuid, created_name text, created_role text, created_at timestamptz not null default now(),
+  picked_name   text, picked_at timestamptz,
+  done_name     text, done_at timestamptz, out_doc_no text,
+  cancel_name   text, cancel_at timestamptz, cancel_note text
+);
+create index on public.orders (status);
+create index on public.orders (created_at);
+
 create table public.opnames (
   id              uuid primary key default gen_random_uuid(),
   doc_no          text not null unique,
@@ -596,6 +615,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_id uuid; v_no text; r jsonb; v_qty numeric; v_code text; bi public.bundle_items;
   v_purpose text := p->>'purpose'; v_need_approval boolean; v_map jsonb := '{}'; v_bund jsonb := '[]';
+  v_ref text := upper(nullif(trim(p->>'ref'),'')); o public.orders; v_sale boolean;
 begin
   perform public._require('owner','staf');
   if v_purpose is null then raise exception 'Pilih tujuan barang keluar'; end if;
@@ -605,6 +625,18 @@ begin
   v_need_approval := v_purpose in ('sampel','rusak','internal','lainnya') and public.my_role() not in ('owner','ops');
   if v_purpose in ('sampel','rusak','internal','lainnya') and coalesce(trim(p->>'note'),'') = '' then
     raise exception 'Keterangan wajib diisi untuk barang keluar non-penjualan';
+  end if;
+
+  -- Satu no. pesanan hanya boleh keluar sekali (cegah dobel input antar divisi)
+  v_sale := v_purpose in ('shopee','tiktok','tokopedia','lazada','website','b2b','offline');
+  if v_sale and v_ref is not null then
+    select * into o from public.orders where ref = v_ref for update;
+    if found and o.status = 'selesai' then
+      raise exception 'Pesanan % sudah dikeluarkan (%) oleh %', v_ref, coalesce(o.out_doc_no,'-'), coalesce(o.done_name,'-');
+    end if;
+    if found and o.status = 'batal' then
+      raise exception 'Pesanan % sudah dibatalkan oleh %: %', v_ref, coalesce(o.cancel_name,'-'), coalesce(o.cancel_note,'-');
+    end if;
   end if;
 
   -- Pecah SKU bundling jadi isinya, gabungkan SKU yang sama
@@ -639,6 +671,17 @@ begin
   end loop;
 
   if not v_need_approval then perform public._post_outbound(v_id); end if;
+
+  -- Tracker pesanan: tandai selesai (atau catat baru kalau belum pernah diinput)
+  if v_sale and v_ref is not null and (o.id is not null or v_purpose in ('shopee','tiktok','tokopedia','lazada')) then
+    insert into public.orders (ref, resi_no, platform, customer, deadline, items, status, created_by, created_name, created_role,
+                               picked_name, picked_at, done_name, done_at, out_doc_no)
+    values (v_ref, nullif(trim(p->>'resi_no'),''), v_purpose, nullif(trim(p->>'customer'),''), nullif(p->>'deadline','')::date, p->'lines', 'selesai',
+            auth.uid(), public._me_name(), public.my_role(), public._me_name(), now(), public._me_name(), now(), v_no)
+    on conflict (ref) do update set status = 'selesai', items = excluded.items, done_name = excluded.done_name, done_at = now(),
+        out_doc_no = excluded.out_doc_no, picked_name = coalesce(public.orders.picked_name, excluded.picked_name),
+        picked_at = coalesce(public.orders.picked_at, now()), resi_no = coalesce(public.orders.resi_no, excluded.resi_no);
+  end if;
   return jsonb_build_object('doc_no', v_no, 'status', case when v_need_approval then 'pending' else 'posted' end);
 end $$;
 
@@ -914,6 +957,16 @@ create view public.v_outbound_lines with (security_barrier) as
     left join lateral jsonb_array_elements(coalesce(x.allocation, '[]'::jsonb)) a on true
    where public.is_active();
 
+create view public.v_orders with (security_barrier) as
+  select o.id, o.ref, o.resi_no, o.platform, o.customer, o.deadline, o.items, o.status,
+         (select coalesce(sum((x->>'qty')::numeric), 0) from jsonb_array_elements(o.items) x) as total_qty,
+         o.created_name, o.created_role, o.created_at, o.picked_name, o.picked_at, o.done_name, o.done_at, o.out_doc_no,
+         o.cancel_name, o.cancel_at, o.cancel_note,
+         (o.status in ('baru','proses') and o.deadline is not null and o.deadline < public._today()) as late,
+         lower(o.ref || ' ' || coalesce(o.resi_no,'') || ' ' || coalesce(o.customer,'') || ' ' || o.items::text) as search
+    from public.orders o
+   where public.is_active();
+
 create view public.v_opnames with (security_barrier) as
   select o.id, o.doc_no, o.period, o.status, o.note, o.created_name, o.created_at, o.submitted_name, o.submitted_at,
          o.approved_name, o.approved_at,
@@ -1057,6 +1110,94 @@ begin
   update public.user_credentials set init_password = null, changed_by_user = true, updated_at = now() where user_id = auth.uid();
 end $$;
 
+-- PESANAN / TRACKER RESI
+-- p_rows: [{ref, resi_no, platform, customer, deadline, items:[{sku, raw, qty}]}]
+-- p_start = true (gudang): pesanan langsung berstatus "sedang disiapkan".
+-- Pesanan yang sudah pernah diinput (oleh divisi mana pun) tidak dibuat ulang, tapi dilaporkan di "sudah".
+create or replace function public.submit_orders(p_rows jsonb, p_start boolean default false) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; v_ref text; o public.orders; ob record; n int := 0; v_dup jsonb := '[]'; i int := 0; v_start boolean;
+begin
+  perform public._require('owner','staf','sales');
+  v_start := p_start and public.my_role() <> 'sales';
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then raise exception 'Tidak ada pesanan'; end if;
+  for r in select * from jsonb_array_elements(p_rows) loop
+    i := i + 1;
+    v_ref := upper(nullif(trim(r->>'ref'),''));
+    if v_ref is null then raise exception 'Pesanan ke-%: no. pesanan kosong', i; end if;
+    select * into o from public.orders where ref = v_ref for update;
+    if found then
+      if v_start and o.status = 'baru' then
+        update public.orders set status = 'proses', picked_name = public._me_name(), picked_at = now() where id = o.id;
+        o.status := 'proses';
+      end if;
+      v_dup := v_dup || jsonb_build_object('ref', v_ref, 'status', o.status, 'by', o.created_name, 'role', o.created_role, 'out_doc_no', o.out_doc_no);
+      continue;
+    end if;
+    select doc_no, created_name into ob from public.outbounds where upper(ref) = v_ref and status <> 'rejected' limit 1;
+    if found then
+      v_dup := v_dup || jsonb_build_object('ref', v_ref, 'status', 'selesai', 'by', ob.created_name, 'role', 'staf', 'out_doc_no', ob.doc_no);
+      continue;
+    end if;
+    if jsonb_typeof(r->'items') <> 'array' or jsonb_array_length(r->'items') = 0 then raise exception 'Pesanan %: tidak ada barang', v_ref; end if;
+    insert into public.orders (ref, resi_no, platform, customer, deadline, items, status, created_by, created_name, created_role, picked_name, picked_at)
+    values (v_ref, nullif(trim(r->>'resi_no'),''), coalesce(nullif(r->>'platform',''),'shopee'), nullif(trim(r->>'customer'),''),
+            nullif(r->>'deadline','')::date, r->'items', case when v_start then 'proses' else 'baru' end,
+            auth.uid(), public._me_name(), public.my_role(),
+            case when v_start then public._me_name() end, case when v_start then now() end);
+    n := n + 1;
+  end loop;
+  return jsonb_build_object('baru', n, 'sudah', v_dup);
+end $$;
+
+create or replace function public.orders_start(p_refs text[]) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  perform public._require('owner','staf');
+  update public.orders set status = 'proses', picked_name = public._me_name(), picked_at = now()
+   where ref = any(p_refs) and status = 'baru';
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+create or replace function public.order_cancel(p_ref text, p_note text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._require('owner','staf','sales');
+  if coalesce(trim(p_note),'') = '' then raise exception 'Isi alasan pembatalan'; end if;
+  update public.orders set status = 'batal', cancel_name = public._me_name(), cancel_at = now(), cancel_note = trim(p_note)
+   where ref = upper(trim(p_ref)) and status in ('baru','proses');
+  if not found then raise exception 'Pesanan tidak bisa dibatalkan (sudah keluar, sudah batal, atau tidak ada)'; end if;
+end $$;
+
+create or replace function public.order_reopen(p_ref text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._require('owner','staf','sales');
+  update public.orders set status = 'baru', cancel_name = null, cancel_at = null, cancel_note = null, picked_name = null, picked_at = null
+   where ref = upper(trim(p_ref)) and status = 'batal';
+  if not found then raise exception 'Pesanan ini tidak berstatus batal'; end if;
+end $$;
+
+-- Banyak SKU bundling sekaligus dari Excel. p_rows: [{sku, name, items:[{sku, qty}]}]
+create or replace function public.save_bundles(p_rows jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; n int := 0;
+begin
+  perform public._require('owner','sales');
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then raise exception 'File kosong'; end if;
+  for r in select * from jsonb_array_elements(p_rows) loop
+    begin
+      perform public.save_bundle(r);
+    exception when others then
+      raise exception 'Bundling %: %', coalesce(r->>'sku','tanpa kode'), sqlerrm;
+    end;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
 -- ---------------------------------------------------------------------
 -- HAK AKSES
 -- ---------------------------------------------------------------------
@@ -1076,7 +1217,7 @@ alter default privileges in schema public revoke execute on functions from publi
 grant usage on schema public to authenticated;
 grant select on public.v_settings, public.v_brands, public.v_suppliers, public.v_products, public.v_lots, public.v_stock,
                 public.v_moves, public.v_inbounds, public.v_inbound_lines, public.v_outbounds, public.v_outbound_lines,
-                public.v_opnames, public.v_opname_lines, public.v_product_photos, public.v_bundles
+                public.v_opnames, public.v_opname_lines, public.v_product_photos, public.v_bundles, public.v_orders
    to authenticated;
 
 grant execute on function
@@ -1090,7 +1231,8 @@ grant execute on function
   public.save_settings(text, int), public.dashboard(), public.set_product_photo(text, text), public.save_bundle(jsonb),
   public.save_credential(uuid, text, text), public.reset_password(uuid, text), public.mark_password_changed(),
   public.change_login_id(uuid, text), public.propose_product(jsonb), public.approve_product(text, jsonb), public.reject_product(text),
-  public.propose_products(jsonb)
+  public.propose_products(jsonb), public.submit_orders(jsonb, boolean), public.orders_start(text[]),
+  public.order_cancel(text, text), public.order_reopen(text), public.save_bundles(jsonb)
 to authenticated;
 
 -- Brand awal (bisa diubah di aplikasi)
