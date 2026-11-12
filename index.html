@@ -227,6 +227,7 @@ h1{font-family:var(--fd);font-size:1.3rem;font-weight:800;text-transform:upperca
 button.stat{text-align:left;cursor:pointer;font:inherit;color:inherit}button.stat:hover{border-color:var(--brand)}button.stat small{color:var(--ink-2);font-size:.75rem}
 .pwwrap{position:relative;display:block}.pwwrap input{padding-right:64px!important}
 .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--royal);font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;padding:6px 8px}
+.steps li{align-items:center}.steps li>span{line-height:1.45}
 .skuguide{display:grid;gap:8px;margin-top:8px}.skuguide ul{margin:0;padding-left:18px}details summary{cursor:pointer;padding:4px 0}
 .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
 .pcard{border:1px solid var(--line);border-radius:16px;padding:12px;display:grid;grid-template-columns:48px 1fr auto;gap:6px 12px;align-items:center;background:var(--surface)}
@@ -730,7 +731,7 @@ function suggestSku(name,brand){ const b=String(brand||'').toUpperCase(); const 
 /* ---------- Input banyak barang dari Excel ---------- */
 function excelPanel(compact){ const I=G.ui.imp; const approver=is('owner','finance');
   return `<section class="panel" id="excel-panel"><h2>Input banyak barang sekaligus (Excel)</h2>
-   <ol class="steps"><li><b>Unduh template</b> lalu buka di Excel / Google Sheets.</li><li>Isi <b>1 baris = 1 barang</b>: kode SKU, nama, kode brand, wajib ED${approver?', HPP, harga jual':''}. Petunjuk & daftar kode brand ada di sheet berikutnya.</li><li><b>Unggah</b> filenya di sini, cek hasilnya, lalu <b>Simpan semua</b>.</li></ol>
+   <ol class="steps"><li><span><b>Unduh template</b> lalu buka di Excel / Google Sheets.</span></li><li><span>Isi <b>1 baris = 1 barang</b>: kode SKU, nama, kode brand, wajib ED${approver?', HPP, harga jual':''}. Petunjuk & daftar kode brand ada di sheet berikutnya.</span></li><li><span><b>Unggah</b> filenya di sini, cek hasilnya, lalu <b>Simpan semua</b>.</span></li></ol>
    ${approver?'':'<p class="note small">Barang dari staf gudang masuk antrean <b>Menunggu ACC</b>. HPP diisi Owner / Head Operasional / Finance saat ACC. Barangnya tetap bisa langsung dipakai di Barang masuk.</p>'}
    <div class="row"><button class="btn" data-act="tpl-barang">Unduh template Excel</button><label class="btn primary" for="imp-barang" style="display:inline-flex;align-items:center">Unggah file Excel</label><input id="imp-barang" type="file" accept=".xlsx,.xls,.csv" hidden></div>
    <details${compact?'':' open'}><summary><b>Cara membuat kode SKU</b></summary>${skuGuide()}</details>
