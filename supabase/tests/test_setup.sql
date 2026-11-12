@@ -246,7 +246,11 @@ select test.eq((select count(*) from public.v_moves where sku='DKM-NAOH-1KG'), 1
 select test.eq((select approved from public.v_products where sku='DKM-NAOH-1KG'), true, 'produk sudah ACC');
 select test.login('staf@k4.id');
 select public.propose_product('{"sku":"DKM-SALAH","name":"Salah ketik","brand_code":"DKM","track_ed":false}');
+select test.eq(public.propose_products('[{"sku":"DKM-A1","name":"A1","brand_code":"DKM","track_ed":false},{"sku":"ZDO-RO-MXF-40","name":"sudah ada","brand_code":"ZDO"}]')::text, '{"diajukan": 1, "sudah_ada": 1}', 'ajuan Excel: baru diajukan, yang sudah ada dilewati');
+select test.err($$select public.propose_products('[{"sku":"DKM A2","name":"x","brand_code":"DKM"}]')$$, 'Baris 2');
+select test.err($$select public.import_products('[{"sku":"X-9","name":"x","brand_code":"DKM"}]')$$, 'Akses ditolak');
 select test.login('baru@k4.id');
+select public.reject_product('DKM-A1');
 select public.reject_product('DKM-SALAH');
 select public.reject_product('DKM-COBA');
 select public.propose_product('{"sku":"DKM-HCL-1L","name":"HCl 1 L","brand_code":"DKM","track_ed":false,"cost":12000,"price":25000}');

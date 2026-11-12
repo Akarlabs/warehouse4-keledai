@@ -55,7 +55,7 @@ Export Excel data masuk/keluar/kartu stok  ──►  pembukuan (Accurate, dll.)
 
 ## Mulai memakai
 
-1. **Produk**: menu *Produk* → *Template produk* → isi di Excel (SKU, nama, brand, wajib ED, minimum, HPP, harga jual) → *Unggah produk*.
+1. **Produk**: Beranda / menu *Produk* → *Unduh template Excel* → isi (kode SKU, nama, kode brand, wajib ED, HPP, harga jual) → *Unggah file Excel* → cek → *Simpan*. Panduan membuat kode SKU ada di aplikasi dan di sheet *Petunjuk*. Staf gudang juga bisa mengunggah; barangnya menunggu ACC.
 2. **Stok awal**: *Template stok awal* → isi SKU, ED, jumlah hasil hitung fisik hari ini → *Unggah stok awal*.
 3. **Setiap hari**: staf input *Barang masuk* & *Barang keluar* dengan mengetik sebagian kode SKU / nama barang lalu memilih dari daftar.
    Barang keluar juga bisa dari **PDF resi** marketplace, dan **SKU bundling** langsung memotong stok isinya.

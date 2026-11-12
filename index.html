@@ -227,6 +227,7 @@ h1{font-family:var(--fd);font-size:1.3rem;font-weight:800;text-transform:upperca
 button.stat{text-align:left;cursor:pointer;font:inherit;color:inherit}button.stat:hover{border-color:var(--brand)}button.stat small{color:var(--ink-2);font-size:.75rem}
 .pwwrap{position:relative;display:block}.pwwrap input{padding-right:64px!important}
 .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--royal);font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;padding:6px 8px}
+.skuguide{display:grid;gap:8px;margin-top:8px}.skuguide ul{margin:0;padding-left:18px}details summary{cursor:pointer;padding:4px 0}
 .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
 .pcard{border:1px solid var(--line);border-radius:16px;padding:12px;display:grid;grid-template-columns:48px 1fr auto;gap:6px 12px;align-items:center;background:var(--surface)}
 .pcard.warn{border-color:var(--warn)}.pcard.bad{border-color:var(--bad)}
@@ -476,6 +477,7 @@ V.home=async()=>{
     <button class="tile" data-act="go" data-v="stok"><b>Stok & ED</b><small>Cari barang, jumlah & ED</small></button></div>`:'';
   return `<div class="row between"><h1>${{owner:'Dashboard Owner',ops:'Dashboard Head Operasional',staf:'Dashboard Staf Gudang',sales:'Dashboard Sales / Marketplace',finance:'Dashboard Finance'}[role()]}</h1><button class="btn sm" data-act="go" data-v="home">Muat ulang</button></div>
   ${is('staf')?overview+tiles:tiles+stokTbl}
+  ${is('owner','finance','staf')?excelPanel(true):''}
   <div class="stats">
    <button class="stat" data-act="stat" data-k="in_today"><span>Masuk hari ini</span><b>${q(d.in_today)} pcs</b><small>Lihat rincian ›</small></button>
    <button class="stat" data-act="stat" data-k="out_today"><span>Keluar hari ini</span><b>${q(d.out_today)} pcs</b><small>Lihat rincian ›</small></button>
@@ -511,10 +513,11 @@ V.masuk=async()=>{ const canIn=is('owner','staf'); if(canIn&&!G.ui.inD) G.ui.inD
   </section>
   <section class="panel"><h2>2. Barang diterima</h2>
    ${G.ui.np?`<div class="panel" style="background:var(--paper)"><b>Barang baru (belum ada di daftar)</b><p class="small muted">${seeCost()?'Langsung aktif dengan HPP yang diisi di sini. HPP barang yang sudah ada diubah lewat menu Produk → Ubah.':'Akan diajukan ke Owner / Head Operasional / Finance untuk di-ACC. Barangnya tetap bisa langsung dicatat masuk.'}</p>
-     <div class="grid"><label class="field"><span>Nama barang</span><input id="np-name" placeholder="mis. Soda Api 1 kg"></label><label class="field"><span>Buat kode SKU</span><input id="np-sku" placeholder="mis. DKM-SODA-1KG" autocapitalize="characters" spellcheck="false"></label>
+     <div class="grid"><label class="field"><span>Nama barang</span><input id="np-name" placeholder="mis. Soda Api 1 kg"></label><div class="field"><span>Buat kode SKU</span><div class="skuin" style="gap:6px"><input id="np-sku" placeholder="mis. DKM-SODA-1KG" autocapitalize="characters" spellcheck="false" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:9px 10px;min-height:42px;width:100%"><button type="button" class="btn sm" data-act="np-suggest">Buat otomatis</button></div></div>
      <label class="field"><span>Brand</span><select id="np-brand">${G.brands.map(b=>`<option value="${esc(b.code)}">${esc(b.name)}</option>`).join('')}</select></label>
      ${seeCost()?`<label class="field"><span>HPP per pcs (Rp)</span><input id="np-cost" type="number" min="0" inputmode="numeric" placeholder="mis. 9500"></label><label class="field"><span>Harga jual (Rp, opsional)</span><input id="np-price" type="number" min="0" inputmode="numeric"></label><label class="field"><span>Stok minimum (opsional)</span><input id="np-min" type="number" min="0" inputmode="numeric" value="0"></label>`:''}</div>
      <div class="row"><label class="chk"><input type="checkbox" id="np-ed" checked> Wajib catat ED (personal care)</label></div>
+     <details><summary class="small"><b>Cara membuat kode SKU</b></summary>${skuGuide()}</details>
      <div class="row"><button class="btn primary" data-act="np-save">${seeCost()?'Simpan barang':'Ajukan & pakai'}</button><button class="btn ghost" data-act="np-cancel">Batal</button></div></div>`:''}
    <div class="grid">${skuField('in-sku','Produk')}<label class="field"><span>Jumlah (pcs)</span><input id="in-qty" type="number" min="1" inputmode="numeric" value="${esc(G.ui['in-qty']||'')}"></label></div>
    <div class="grid"><label class="field"><span>Tanggal ED ${sel_?(sel_.track_ed?'(wajib untuk produk ini)':'(opsional, isi jika ada)'):'(wajib untuk personal care, isi jika ada)'}</span><input id="in-ed" type="date" value="${esc(G.ui['in-ed']||'')}"></label><label class="field"><span>No. batch (opsional)</span><input id="in-batch" value="${esc(G.ui['in-batch']||'')}"></label></div>
@@ -684,6 +687,7 @@ function download(blob,name){ const a=document.createElement('a'); a.href=URL.cr
 V.produk=async()=>{ const st=await sel('v_stock'); G.ui.stockMap={}; st.forEach(r=>G.ui.stockMap[r.sku]=r.qty); const ed=G.ui.edit; const lsel=G.ui.lsel||{}; const nL=Object.values(lsel).reduce((a,b)=>a+(+b||0),0);
   return `<h1>Produk</h1><p class="muted">Setiap barang punya kode SKU. Staf cukup mengetik sebagian kode SKU atau nama barang, lalu memilih dari daftar.</p>
   ${pendingSection()}
+  ${is('owner','finance','staf')?excelPanel():''}
   ${is('owner','finance')?`<section class="panel"><h2>${ed?'Ubah produk '+esc(ed.sku):'Tambah produk'}</h2><div class="grid">
    <label class="field"><span>Kode SKU</span><input id="p-sku" value="${esc(ed?.sku||'')}" ${ed?'disabled':''} placeholder="mis. ZDO-RO-MXF-40"></label>
    <label class="field"><span>Nama produk</span><input id="p-name" value="${esc(ed?.name||'')}"></label>
@@ -694,8 +698,8 @@ V.produk=async()=>{ const st=await sel('v_stock'); G.ui.stockMap={}; st.forEach(
    <label class="field"><span>Stok minimum</span><input id="p-min" type="number" min="0" value="${ed?.min_stock??0}"></label></div>
    <div class="row"><label class="chk"><input type="checkbox" id="p-ed" ${ed?(ed.track_ed?'checked':''):'checked'}> Wajib catat ED (personal care)</label><label class="chk"><input type="checkbox" id="p-active" ${ed?(ed.active?'checked':''):'checked'}> Aktif</label></div>
    <div class="row"><button class="btn primary" data-act="p-save">${ed?'Simpan perubahan':'Simpan produk'}</button>${ed?'<button class="btn ghost" data-act="p-cancel">Batal</button>':''}</div></section>
-  <section class="panel"><h2>Impor dari Excel</h2><p class="small muted">Untuk memasukkan banyak produk sekaligus, atau stok awal saat mulai memakai sistem. Unduh templatenya, isi, lalu unggah.</p>
-   <div class="row"><button class="btn" data-act="tpl-produk">Template produk</button><label class="btn primary" for="imp-produk" style="display:inline-flex;align-items:center">Unggah produk</label><input id="imp-produk" type="file" accept=".xlsx,.xls,.csv" hidden></div>
+  <section class="panel"><h2>Stok awal & brand</h2><p class="small muted">Stok awal dipakai sekali saat mulai memakai sistem: isi hasil hitung fisik hari ini per kode SKU & ED.</p>
+
    <div class="row"><button class="btn" data-act="tpl-saldo">Template stok awal</button><label class="btn primary" for="imp-saldo" style="display:inline-flex;align-items:center">Unggah stok awal</label><input id="imp-saldo" type="file" accept=".xlsx,.xls,.csv" hidden></div>
    <div class="skuin"><label class="field"><span>Tambah brand (kode & nama)</span><input id="b-code" placeholder="mis. BRM"></label><label class="field"><span>&nbsp;</span><input id="b-name" placeholder="mis. Bromen Skincare"></label><button class="btn" data-act="b-save">Simpan brand</button></div></section>`:''}
   <section class="panel"><div class="row between"><h2>Daftar produk (${G.products.length})</h2></div>
@@ -704,6 +708,39 @@ V.produk=async()=>{ const st=await sel('v_stock'); G.ui.stockMap={}; st.forEach(
   </tbody></table></div></section>
   ${bundleSection()}
 `; };
+/* ---------- Kode SKU: panduan & saran otomatis ---------- */
+function skuGuide(){ return `<div class="skuguide small">
+  <p><b>Format:</b> <span class="code">BRAND-JENIS-VARIAN-UKURAN</span> — huruf besar & angka, dipisah tanda minus (-), tanpa spasi, maks. 40 karakter.</p>
+  <div class="tbl"><table><thead><tr><th>Bagian</th><th>Isi</th><th>Contoh</th></tr></thead><tbody>
+   <tr><td><b>BRAND</b></td><td>Kode brand (lihat daftar di bawah)</td><td class="code">ZDO, DKM</td></tr>
+   <tr><td><b>JENIS</b></td><td>Jenis produk, 2–4 huruf</td><td class="code">RO (roll on), SPR (spray), BM (body mist), TCCA, AQD</td></tr>
+   <tr><td><b>VARIAN</b></td><td>Aroma / warna / kadar, 2–4 huruf (boleh dilewati kalau tidak ada)</td><td class="code">MXF (Max Fresh), DAC (Daily Active), 90</td></tr>
+   <tr><td><b>UKURAN</b></td><td>Isi + satuan</td><td class="code">40, 75ML, 1KG, 1L, 25KG</td></tr></tbody></table></div>
+  <p><b>Contoh jadi:</b> <span class="code">ZDO-RO-MXF-40</span> · <span class="code">ZDO-BM-CHM-75</span> · <span class="code">DKM-TCCA90-1KG</span> · <span class="code">DKM-AQD-1L</span></p>
+  <ul><li>1 kode = 1 varian & 1 ukuran. Ukuran beda → kode beda.</li>
+   <li>Usahakan <b>sama persis</b> dengan SKU di Shopee/TikTok, supaya PDF resi & bundling terbaca otomatis.</li>
+   <li>Kode yang sudah dipakai jangan diganti-ganti. Barang tidak dijual lagi → nonaktifkan, jangan dipakai ulang untuk barang lain.</li>
+   <li>Paket isi banyak (mis. 2 roll on) dibuat sebagai <b>SKU bundling</b> di menu Produk, bukan kode barang baru.</li></ul>
+  <p><b>Kode brand:</b> ${G.brands.map(b=>`<span class="code">${esc(b.code)}</span> = ${esc(b.name)}`).join(' · ')||'–'}</p></div>`; }
+function suggestSku(name,brand){ const b=String(brand||'').toUpperCase(); const bn=(G.brands.find(x=>x.code===b)?.name||'').toLowerCase().split(/\s+/);
+  let size=''; const words=[]; String(name||'').replace(/(\d+(?:[.,]\d+)?)\s*(ml|l|lt|liter|kg|gr|g|gram|pcs)\b/gi,(m,n,u)=>{ u=u.toUpperCase().replace('LITER','L').replace('LT','L').replace('GRAM','G').replace('GR','G'); size=n.replace(',','.').replace('.','')+(u==='PCS'?'':u); return ' '; })
+    .split(/[^A-Za-z0-9]+/).forEach(w=>{ if(w&&!bn.includes(w.toLowerCase())) words.push(w); });
+  const core=(words.length===1&&!/^\d+$/.test(words[0])?words[0].slice(0,4):words.map(w=>/^\d+$/.test(w)?w:w[0]).join('')).toUpperCase().slice(0,6);
+  return [b,core,size].filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g,'').slice(0,40); }
+/* ---------- Input banyak barang dari Excel ---------- */
+function excelPanel(compact){ const I=G.ui.imp; const approver=is('owner','finance');
+  return `<section class="panel" id="excel-panel"><h2>Input banyak barang sekaligus (Excel)</h2>
+   <ol class="steps"><li><b>Unduh template</b> lalu buka di Excel / Google Sheets.</li><li>Isi <b>1 baris = 1 barang</b>: kode SKU, nama, kode brand, wajib ED${approver?', HPP, harga jual':''}. Petunjuk & daftar kode brand ada di sheet berikutnya.</li><li><b>Unggah</b> filenya di sini, cek hasilnya, lalu <b>Simpan semua</b>.</li></ol>
+   ${approver?'':'<p class="note small">Barang dari staf gudang masuk antrean <b>Menunggu ACC</b>. HPP diisi Owner / Head Operasional / Finance saat ACC. Barangnya tetap bisa langsung dipakai di Barang masuk.</p>'}
+   <div class="row"><button class="btn" data-act="tpl-barang">Unduh template Excel</button><label class="btn primary" for="imp-barang" style="display:inline-flex;align-items:center">Unggah file Excel</label><input id="imp-barang" type="file" accept=".xlsx,.xls,.csv" hidden></div>
+   <details${compact?'':' open'}><summary><b>Cara membuat kode SKU</b></summary>${skuGuide()}</details>
+   ${I?impPreview(I):''}</section>`; }
+function impPreview(I){ const ok=I.rows.filter(r=>!r.err&&r.st!=='skip'), bad=I.rows.filter(r=>r.err);
+  return `<div class="panel" style="background:var(--paper)"><div class="row between"><b>${esc(I.file)} · ${I.rows.length} baris</b><span class="small">${ok.length} siap · ${bad.length} perlu dibetulkan</span></div>
+   <div class="tbl" style="max-height:380px;overflow:auto"><table><thead><tr><th>Baris</th><th>Kode SKU</th><th>Nama</th><th>Brand</th><th>ED</th>${is('owner','finance')?'<th class="n">HPP</th>':''}<th>Status</th></tr></thead><tbody>${I.rows.map(r=>`<tr><td>${r.line}</td><td class="code">${esc(r.sku)}</td><td>${esc(r.name)}</td><td class="code">${esc(r.brand_code)}</td><td>${r.track_ed?'Wajib':'–'}</td>${is('owner','finance')?`<td class="n">${r.cost!==''?rp(r.cost):'–'}</td>`:''}
+     <td>${r.err?`<span class="badge b-bad">${esc(r.err)}</span>`:r.st==='skip'?'<span class="badge b-neu">Sudah ada, dilewati</span>':r.st==='upd'?'<span class="badge b-info">Diperbarui</span>':'<span class="badge b-ok">Baru</span>'}</td></tr>`).join('')}</tbody></table></div>
+   ${bad.length?'<p class="small" style="color:var(--bad)">Betulkan baris yang merah di Excel, lalu unggah ulang.</p>':''}
+   <div class="row"><button class="btn primary" data-act="imp-save" ${ok.length&&!bad.length?'':'disabled'}>Simpan ${ok.length} barang</button><button class="btn ghost" data-act="imp-cancel">Batal</button></div></div>`; }
 function pendingSection(){ const P=G.products.filter(p=>p.approved===false); if(!P.length) return '';
   const can=is('owner','finance');
   return `<section class="panel hl"><h2>Barang baru menunggu ACC (${P.length})</h2><p class="small muted">${can?'Diajukan staf gudang saat menerima barang. Cek kode & nama, isi HPP dan harga jual, lalu ACC. Kode boleh dibetulkan — stok & riwayatnya ikut pindah.':'Barang ini sudah bisa dipakai, tapi menunggu ACC Owner / Head Operasional / Finance.'}</p>
@@ -886,6 +923,26 @@ A['p-save']=(d,e,btn)=>busy(btn,async()=>{ const sku=await rpc('save_product',{p
   G.ui.edit=null; await loadMaster(); banner('ok','PRODUK DISIMPAN',sku); renderView(); });
 A['b-save']=(d,e,btn)=>busy(btn,async()=>{ await rpc('save_brand',{p_code:$('#b-code').value,p_name:$('#b-name').value}); await loadMaster(); banner('ok','BRAND DISIMPAN',''); renderView(); });
 A['tpl-produk']=()=>tpl('template_produk_4keledai.xlsx',[['sku','nama','brand_kode','wajib_ed','stok_minimum','hpp','harga_jual','barcode'],['ZDO-RO-MXF-40','Zerodeo Deodorant Roll On Max Fresh 40ml','ZDO','ya',36,9500,29000,''],['WT-TCCA90-1KG','Kaporit TCCA 90% 1 kg','DKM','tidak',20,26273,52000,'']]);
+A['tpl-barang']=()=>{ if(!window.XLSX) return banner('bad','MODUL EXCEL BELUM TERMUAT','Cek internet'); const appr=is('owner','finance');
+  const head=appr?['kode_sku','nama_barang','brand_kode','wajib_ed','hpp','harga_jual','stok_minimum','barcode']:['kode_sku','nama_barang','brand_kode','wajib_ed'];
+  const ex=[['ZDO-RO-MXF-40','Zerodeo Deodorant Roll On Max Fresh 40ml','ZDO','ya',9500,29000,36,''],['DKM-TCCA90-1KG','Kaporit TCCA 90% 1 kg','DKM','tidak',26000,52000,20,'']].map(r=>r.slice(0,head.length));
+  const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([head,...ex]); ws['!cols']=head.map(h=>({wch:h==='nama_barang'?44:16})); XLSX.utils.book_append_sheet(wb,ws,'Isi di sini');
+  const pet=[['PETUNJUK PENGISIAN'],[''],['1. Isi di sheet "Isi di sini". Baris 2–3 hanya contoh: hapus atau timpa.'],['2. Satu baris = satu barang (satu varian & satu ukuran).'],['3. Kolom:'],
+   ['   kode_sku','Wajib. Huruf besar/angka/minus, tanpa spasi. Format BRAND-JENIS-VARIAN-UKURAN, mis. ZDO-RO-MXF-40'],['   nama_barang','Wajib. Nama lengkap seperti di kemasan, mis. Zerodeo Deodorant Roll On Max Fresh 40ml'],
+   ['   brand_kode','Wajib. Kode brand dari sheet "Kode brand", mis. ZDO'],['   wajib_ed','ya = personal care (ED wajib dicatat), tidak = bukan personal care'],
+   ...(appr?[['   hpp','Harga pokok per pcs (angka saja, tanpa Rp/titik)'],['   harga_jual','Opsional'],['   stok_minimum','Opsional. Muncul peringatan kalau stok di bawah angka ini'],['   barcode','Opsional. Barcode pabrik']]:[['   (HPP)','Tidak diisi staf gudang. Diisi Owner / Head Operasional / Finance saat ACC.']]),
+   [''],['ATURAN KODE SKU'],['- BRAND: kode brand (ZDO, DKM, ...)'],['- JENIS: 2–4 huruf, mis. RO = roll on, SPR = spray, BM = body mist'],['- VARIAN: 2–4 huruf aroma/kadar, mis. MXF = Max Fresh (boleh dilewati)'],['- UKURAN: isi + satuan, mis. 40, 75ML, 1KG, 1L'],
+   ['- Contoh: ZDO-RO-MXF-40, ZDO-BM-CHM-75, DKM-TCCA90-1KG, DKM-AQD-1L'],['- Usahakan sama persis dengan SKU di Shopee / TikTok.'],['- Ukuran beda = kode beda. Kode yang sudah dipakai jangan diganti.'],['- Kode yang sudah ada di sistem akan dilewati / diperbarui (lihat sheet "Barang terdaftar").'],
+   [''],['4. Simpan file, lalu di aplikasi klik "Unggah file Excel" → cek → "Simpan semua".']];
+  const wp=XLSX.utils.aoa_to_sheet(pet); wp['!cols']=[{wch:20},{wch:95}]; XLSX.utils.book_append_sheet(wb,wp,'Petunjuk');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['brand_kode','nama_brand'],...G.brands.map(b=>[b.code,b.name])]),'Kode brand');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['kode_sku','nama_barang','brand_kode','wajib_ed'],...G.products.map(p=>[p.sku,p.name,p.brand_code,p.track_ed?'ya':'tidak'])]),'Barang terdaftar');
+  XLSX.writeFile(wb,'Template_Barang_4Keledai.xlsx'); };
+A['imp-cancel']=()=>{ G.ui.imp=null; renderView(); };
+A['imp-save']=(d,e,btn)=>busy(btn,async()=>{ const I=G.ui.imp; const rows=I.rows.filter(r=>!r.err&&r.st!=='skip').map(r=>({sku:r.sku,name:r.name,brand_code:r.brand_code,track_ed:r.track_ed,cost:r.cost===''?0:num(r.cost),price:num(r.price),min_stock:num(r.min_stock),barcode:r.barcode}));
+  let msg; if(is('owner','finance')){ const x=await rpc('import_products',{p_rows:rows}); msg=`${x.baru} baru, ${x.diperbarui} diperbarui`; } else { const x=await rpc('propose_products',{p_rows:rows}); msg=`${x.diajukan} barang diajukan, menunggu ACC`; }
+  G.ui.imp=null; await loadMaster(); banner('ok','BARANG TERSIMPAN',msg); renderView(); });
+A['np-suggest']=()=>{ const v=suggestSku($('#np-name').value,$('#np-brand').value); if(!v) return banner('bad','ISI NAMA BARANG DULU',''); $('#np-sku').value=v; };
 A['tpl-saldo']=()=>tpl('template_stok_awal_4keledai.xlsx',[['sku','ed','qty'],['ZDO-RO-MXF-40','2027-12-31',120],['WT-TCCA90-1KG','',80]]);
 A['lbl-make']=()=>{ labelSync(); if(!Object.keys(G.ui.lsel).length) return banner('bad','ISI JUMLAH LABEL','Isi kolom Label pada produk yang mau dicetak'); G.ui.labels=true; renderView(); };
 function labelSync(){ G.ui.lsel={}; document.querySelectorAll('[data-label]').forEach(i=>{ if(+i.value>0) G.ui.lsel[i.dataset.label]=Math.min(300,+i.value); }); }
@@ -948,6 +1005,15 @@ document.addEventListener('change',async e=>{ const t=e.target, id=t.id; liveSyn
   if(id==='imp-produk'&&t.files[0]){ const f=t.files[0]; t.value=''; await busy(null,async()=>{ const rows=await readSheet(f);
     const data=rows.map(r=>({sku:String(r.sku||r.kode_sku||'').trim(),name:String(r.nama||r.nama_produk||r.name||'').trim(),brand_code:String(r.brand_kode||r.brand||'').trim(),track_ed:yes(r.wajib_ed),min_stock:num(r.stok_minimum),cost:num(r.hpp),price:num(r.harga_jual),barcode:String(r.barcode||'').trim()}));
     const res=await rpc('import_products',{p_rows:data}); await loadMaster(); banner('ok','PRODUK DIIMPOR',`${res.baru} baru, ${res.diperbarui} diperbarui`); renderView(); }); }
+  if(id==='imp-barang'&&t.files[0]){ const f=t.files[0]; t.value=''; await busy(null,async()=>{ const raw=await readSheet(f); const appr=is('owner','finance'); const seen={};
+    const rows=raw.map((r,i)=>{ const x={line:i+2,sku:String(r.kode_sku||r.sku||'').trim().toUpperCase(),name:String(r.nama_barang||r.nama||r.nama_produk||'').trim(),brand_code:String(r.brand_kode||r.brand||'').trim().toUpperCase(),track_ed:yes(r.wajib_ed),cost:r.hpp??'',price:r.harga_jual||0,min_stock:r.stok_minimum||0,barcode:String(r.barcode||'').trim()};
+      if(!x.sku) x.err='Kode SKU kosong'; else if(!/^[A-Z0-9._-]{2,40}$/.test(x.sku)) x.err='Kode SKU tidak boleh ada spasi/simbol';
+      else if(!x.name) x.err='Nama barang kosong'; else if(!G.brands.some(b=>b.code===x.brand_code)) x.err=`Brand "${x.brand_code}" belum ada`;
+      else if(seen[x.sku]) x.err=`Kode dobel (baris ${seen[x.sku]})`; else if(G.bundles.some(b=>b.sku===x.sku)) x.err='Kode sudah dipakai SKU bundling';
+      else if(appr&&x.cost!==''&&!(num(x.cost)>=0)) x.err='HPP bukan angka';
+      seen[x.sku]=seen[x.sku]||x.line; x.st=prod(x.sku)?(appr?'upd':'skip'):'new'; return x; });
+    if(!rows.length) throw new Error('File kosong — isi di sheet "Isi di sini"');
+    G.ui.imp={file:f.name,rows}; renderView().then(()=>$('#excel-panel')?.scrollIntoView({block:'start'})); }); }
   if(id==='imp-saldo'&&t.files[0]){ const f=t.files[0]; t.value=''; await busy(null,async()=>{ const rows=await readSheet(f);
     const lines=rows.map((r,i)=>{ const sku=String(r.sku||'').trim().toUpperCase(); const ed=toDate(r.ed); if(ed&&ed.startsWith('INVALID')) throw new Error(`Baris ${i+2}: tanggal ED "${ed.slice(8)}" tidak dikenali (pakai format 2027-12-31)`); if(!prod(sku)) throw new Error(`Baris ${i+2}: SKU ${sku||'(kosong)'} belum terdaftar`); return {sku,ed,qty:num(r.qty||r.jumlah)}; });
     const no=await rpc('create_inbound',{p:{source:'saldo_awal',note:'Impor stok awal dari '+f.name,lines}}); banner('ok','STOK AWAL MASUK',`${no} · ${lines.length} baris`); }); }

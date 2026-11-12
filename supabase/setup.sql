@@ -405,6 +405,26 @@ begin
   return v_sku;
 end $$;
 
+-- Ajukan banyak barang baru sekaligus dari Excel (staf gudang). Kode yang sudah ada dilewati.
+create or replace function public.propose_products(p_rows jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; i int := 0; n_new int := 0; n_skip int := 0;
+begin
+  perform public._require('owner','staf','finance');
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then raise exception 'File kosong'; end if;
+  for r in select * from jsonb_array_elements(p_rows) loop
+    i := i + 1;
+    if exists (select 1 from public.products where sku = upper(trim(r->>'sku'))) then n_skip := n_skip + 1; continue; end if;
+    begin
+      perform public.propose_product(r);
+    exception when others then
+      raise exception 'Baris % (%): %', i + 1, coalesce(r->>'sku','tanpa SKU'), sqlerrm;
+    end;
+    n_new := n_new + 1;
+  end loop;
+  return jsonb_build_object('diajukan', n_new, 'sudah_ada', n_skip);
+end $$;
+
 -- ACC produk ajuan: boleh sekalian membetulkan kode SKU & nama, dan mengisi HPP / harga jual / minimum.
 -- p: {new_sku, name, cost, price, min_stock, track_ed}
 create or replace function public.approve_product(p_sku text, p jsonb) returns text
@@ -443,7 +463,7 @@ create or replace function public.import_products(p_rows jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare r jsonb; n_new int := 0; n_upd int := 0; i int := 0;
 begin
-  perform public._require('owner');
+  perform public._require('owner','finance');
   if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then raise exception 'File kosong'; end if;
   for r in select * from jsonb_array_elements(p_rows) loop
     i := i + 1;
@@ -1066,7 +1086,8 @@ grant execute on function
   public.list_users(), public.update_user(uuid, text, boolean, text), public.update_my_name(text),
   public.save_settings(text, int), public.dashboard(), public.set_product_photo(text, text), public.save_bundle(jsonb),
   public.save_credential(uuid, text, text), public.reset_password(uuid, text), public.mark_password_changed(),
-  public.change_login_id(uuid, text), public.propose_product(jsonb), public.approve_product(text, jsonb), public.reject_product(text)
+  public.change_login_id(uuid, text), public.propose_product(jsonb), public.approve_product(text, jsonb), public.reject_product(text),
+  public.propose_products(jsonb)
 to authenticated;
 
 -- Brand awal (bisa diubah di aplikasi)
