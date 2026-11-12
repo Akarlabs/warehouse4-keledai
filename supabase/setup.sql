@@ -395,9 +395,13 @@ begin
   if not exists (select 1 from public.brands where code = upper(trim(p->>'brand_code'))) then
     raise exception 'Brand % belum ada', p->>'brand_code';
   end if;
-  insert into public.products (sku, name, brand_code, track_ed, approved, proposed_name)
+  -- Owner / Head Operasional / Finance boleh langsung isi HPP & harga jual (dan langsung ACC); staf gudang tidak
+  insert into public.products (sku, name, brand_code, track_ed, cost, price, min_stock, approved, proposed_name)
   values (v_sku, trim(p->>'name'), upper(trim(p->>'brand_code')), coalesce((p->>'track_ed')::boolean, true),
-          public.my_role() in ('owner','ops'), public._me_name());
+          case when public.can_see_cost() then coalesce((p->>'cost')::numeric, 0) else 0 end,
+          case when public.can_see_cost() then coalesce((p->>'price')::numeric, 0) else 0 end,
+          case when public.can_see_cost() then coalesce((p->>'min_stock')::numeric, 0) else 0 end,
+          public.can_see_cost(), public._me_name());
   return v_sku;
 end $$;
 

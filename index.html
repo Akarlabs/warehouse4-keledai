@@ -420,7 +420,7 @@ function renderAuth(){ const t=G.ui.authTab||'masuk', first=t==='daftar';
   <form id="authform" class="grid1">
    ${first?'<label class="field"><span>Nama lengkap</span><input id="au-name" required autocomplete="name"></label>':''}
    <label class="field"><span>${first?'Email Owner':'ID'}</span><input id="au-email" ${first?'type="email"':'type="text" autocapitalize="none" spellcheck="false" placeholder="mis. gudang1"'} required autocomplete="username"></label>
-   <label class="field"><span>Password</span><input id="au-pass" type="password" required minlength="8" autocomplete="${first?'new-password':'current-password'}"></label>
+   <label class="field"><span>Password</span><input id="au-pass" type="password" required ${first?'minlength="8"':''} autocomplete="${first?'new-password':'current-password'}"></label>
    <button class="btn primary big">${first?'Buat akun Owner':'Masuk'}</button>
   </form></div>
   <p class="small muted center">${first?'<button class="linkbtn" data-act="authtab" data-t="masuk">← Kembali ke halaman masuk</button>':'Lupa password? Hubungi Owner.<br><button class="linkbtn" data-act="authtab" data-t="daftar">Pasang pertama kali (khusus Owner)</button>'}</p></div>`; eyes(); }
@@ -510,11 +510,12 @@ V.masuk=async()=>{ const canIn=is('owner','staf'); if(canIn&&!G.ui.inD) G.ui.inD
   <div class="field"><span>Foto bukti terima (surat jalan ditandatangani / barang)</span><div class="row">${d.photo?`<img class="thumb" src="${d.photo}" alt="Foto bukti">`:''}<label class="btn" for="in-photo" style="display:inline-flex;align-items:center">${d.photo?'Ganti foto':'Ambil / pilih foto'}</label><input id="in-photo" type="file" accept="image/*" capture="environment" hidden>${d.photo?'<button class="btn ghost" data-act="in-photo-del">Hapus</button>':''}</div></div>
   </section>
   <section class="panel"><h2>2. Barang diterima</h2>
-   ${G.ui.np?`<div class="panel" style="background:var(--paper)"><b>Barang baru (belum ada di daftar)</b><p class="small muted">${is('owner')?'Langsung aktif. HPP bisa diisi nanti di menu Produk.':'Akan diajukan ke Owner / Head Operasional / Finance untuk di-ACC. Barangnya tetap bisa langsung dicatat masuk.'}</p>
+   ${G.ui.np?`<div class="panel" style="background:var(--paper)"><b>Barang baru (belum ada di daftar)</b><p class="small muted">${seeCost()?'Langsung aktif dengan HPP yang diisi di sini. HPP barang yang sudah ada diubah lewat menu Produk → Ubah.':'Akan diajukan ke Owner / Head Operasional / Finance untuk di-ACC. Barangnya tetap bisa langsung dicatat masuk.'}</p>
      <div class="grid"><label class="field"><span>Nama barang</span><input id="np-name" placeholder="mis. Soda Api 1 kg"></label><label class="field"><span>Buat kode SKU</span><input id="np-sku" placeholder="mis. DKM-SODA-1KG" autocapitalize="characters" spellcheck="false"></label>
-     <label class="field"><span>Brand</span><select id="np-brand">${G.brands.map(b=>`<option value="${esc(b.code)}">${esc(b.name)}</option>`).join('')}</select></label></div>
+     <label class="field"><span>Brand</span><select id="np-brand">${G.brands.map(b=>`<option value="${esc(b.code)}">${esc(b.name)}</option>`).join('')}</select></label>
+     ${seeCost()?`<label class="field"><span>HPP per pcs (Rp)</span><input id="np-cost" type="number" min="0" inputmode="numeric" placeholder="mis. 9500"></label><label class="field"><span>Harga jual (Rp, opsional)</span><input id="np-price" type="number" min="0" inputmode="numeric"></label><label class="field"><span>Stok minimum (opsional)</span><input id="np-min" type="number" min="0" inputmode="numeric" value="0"></label>`:''}</div>
      <div class="row"><label class="chk"><input type="checkbox" id="np-ed" checked> Wajib catat ED (personal care)</label></div>
-     <div class="row"><button class="btn primary" data-act="np-save">${is('owner')?'Simpan barang':'Ajukan & pakai'}</button><button class="btn ghost" data-act="np-cancel">Batal</button></div></div>`:''}
+     <div class="row"><button class="btn primary" data-act="np-save">${seeCost()?'Simpan barang':'Ajukan & pakai'}</button><button class="btn ghost" data-act="np-cancel">Batal</button></div></div>`:''}
    <div class="grid">${skuField('in-sku','Produk')}<label class="field"><span>Jumlah (pcs)</span><input id="in-qty" type="number" min="1" inputmode="numeric" value="${esc(G.ui['in-qty']||'')}"></label></div>
    <div class="grid"><label class="field"><span>Tanggal ED ${sel_?(sel_.track_ed?'(wajib untuk produk ini)':'(opsional, isi jika ada)'):'(wajib untuk personal care, isi jika ada)'}</span><input id="in-ed" type="date" value="${esc(G.ui['in-ed']||'')}"></label><label class="field"><span>No. batch (opsional)</span><input id="in-batch" value="${esc(G.ui['in-batch']||'')}"></label></div>
    <div class="row"><button class="btn" data-act="in-add">Tambah ke daftar</button>${G.ui.np?'':'<button class="btn ghost" data-act="np-open">+ Barang baru (belum ada kodenya)</button>'}</div>
@@ -799,8 +800,10 @@ A['in-add']=()=>{ inSync(); const p=readSku('in-sku'), qty=num($('#in-qty').valu
   G.ui['in-sku']=''; G.ui['in-qty']=''; G.ui['in-ed']=''; $('#in-qty').value=''; G.ui['in-batch']=''; if($('#in-ed')) $('#in-ed').value=''; banner('ok','DITAMBAHKAN',`${p.name} · ${q(qty)} pcs${ed?' · ED '+fdate(ed):''}`); renderView(); };
 A['np-open']=()=>{ inSync(); G.ui.np=true; renderView(); };
 A['np-cancel']=()=>{ G.ui.np=false; renderView(); };
-A['np-save']=(d,e,btn)=>busy(btn,async()=>{ inSync(); const sku=await rpc('propose_product',{p:{sku:$('#np-sku').value,name:$('#np-name').value,brand_code:$('#np-brand').value,track_ed:$('#np-ed').checked}});
-  await loadMaster(); const p=prod(sku); G.ui.np=false; G.ui['in-sku']=p?p.sku+' — '+p.name:sku; banner('ok',is('owner')?'BARANG DISIMPAN':'BARANG DIAJUKAN',sku+' · isi ED & jumlah, lalu Tambah ke daftar'); renderView(); });
+A['np-save']=(d,e,btn)=>busy(btn,async()=>{ inSync(); const x={sku:$('#np-sku').value,name:$('#np-name').value,brand_code:$('#np-brand').value,track_ed:$('#np-ed').checked};
+  if(seeCost()){ const c=$('#np-cost').value; if(c==='') throw new Error('Isi HPP per pcs'); x.cost=num(c); x.price=num($('#np-price').value); x.min_stock=num($('#np-min').value); }
+  const sku=await rpc('propose_product',{p:x});
+  await loadMaster(); const p=prod(sku); G.ui.np=false; G.ui['in-sku']=p?p.sku+' — '+p.name:sku; banner('ok',seeCost()?'BARANG DISIMPAN':'BARANG DIAJUKAN',sku+' · isi ED & jumlah, lalu Tambah ke daftar'); renderView(); });
 A['in-del']=d=>{ inSync(); G.ui.inD.lines.splice(+d.i,1); renderView(); };
 A['in-reset']=()=>{ G.ui.inD=newIn(); renderView(); };
 A['in-photo-del']=()=>{ inSync(); G.ui.inD.photo=null; renderView(); };
