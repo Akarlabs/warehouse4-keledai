@@ -229,6 +229,12 @@ button.stat{text-align:left;cursor:pointer;font:inherit;color:inherit}button.sta
 .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--royal);font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;padding:6px 8px}
 .steps li{align-items:center}.steps li>span{line-height:1.45}
 .skuguide{display:grid;gap:8px;margin-top:8px}.skuguide ul{margin:0;padding-left:18px}details summary{cursor:pointer;padding:4px 0}
+.picks{display:grid;gap:8px}
+.pick{display:grid;grid-template-columns:auto 44px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--surface);cursor:pointer}
+.pick:not(:has(input)){grid-template-columns:1fr auto;cursor:default}
+.pick input{width:26px;height:26px}.pick.on{background:var(--ok-bg);border-color:var(--ok)}
+.pk-info{display:grid;gap:2px;min-width:0}.pk-qty{text-align:right;line-height:1}.pk-qty b{display:block;font-family:var(--fd);font-weight:800;font-size:1.7rem;color:var(--brand)}.pk-qty span{font-size:.75rem;color:var(--ink-2)}
+@media (max-width:480px){.pick{grid-template-columns:auto 1fr auto}.pick .pthumb{display:none}}
 .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
 .pcard{border:1px solid var(--line);border-radius:16px;padding:12px;display:grid;grid-template-columns:48px 1fr auto;gap:6px 12px;align-items:center;background:var(--surface)}
 .pcard.warn{border-color:var(--warn)}.pcard.bad{border-color:var(--bad)}
@@ -534,12 +540,13 @@ function inSync(){ const d=G.ui.inD; if(!d||!$('#in-source')||$('#in-source').da
 /* ---------------- BARANG KELUAR ---------------- */
 function newOut(){ return {gen:++GEN,doc_date:today(),purpose:'shopee',ref:'',customer:'',note:'',lines:[]}; }
 V.keluar=async()=>{ const canOut=is('owner','staf'); if(canOut&&!G.ui.outD) G.ui.outD=newOut(); const d=G.ui.outD; const page=G.ui.outPage||1;
-  const [list,lots]=await Promise.all([sel('v_outbounds',x=>x.order('created_at',{ascending:false}).range(0,page*30-1)), canOut&&d.lines.length?sel('v_lots',x=>x.in('sku',[...new Set(d.lines.flatMap(l=>bund(l.sku)?bund(l.sku).items.map(i=>i.sku):[l.sku]))])):[]]);
+  const needSku=[...new Set([...d.lines.flatMap(l=>bund(l.sku)?bund(l.sku).items.map(i=>i.sku):[l.sku]),...pickData(G.ui.resi||[]).comp.map(c=>c.sku)])];
+  const [list,lots]=await Promise.all([sel('v_outbounds',x=>x.order('created_at',{ascending:false}).range(0,page*30-1)), canOut&&needSku.length?sel('v_lots',x=>x.in('sku',needSku)):[]]);
   const pend=list.filter(o=>o.status==='pending');
   const plan=(sku,qty)=>{ const allowExp=d.purpose==='rusak'; let ls=lots.filter(l=>l.sku===sku&&(allowExp||l.ed_status!=='kedaluwarsa')).sort((a,b)=>allowExp?((a.ed_status==='kedaluwarsa'?0:1)-(b.ed_status==='kedaluwarsa'?0:1))||String(a.ed||'9').localeCompare(String(b.ed||'9')):String(a.ed||'9').localeCompare(String(b.ed||'9')));
     const t=[]; let left=qty; for(const l of ls){ if(left<=0) break; const n=Math.min(num(l.qty),left); t.push({ed:l.ed,qty:n}); left-=n; } return {t,short:left}; };
   return `<h1>Barang keluar</h1>
-  ${canOut?resiPanel():''}
+  ${canOut?resiPanel(lots):''}
   ${canOut?`<section class="panel"><h2>Input manual</h2><div class="grid">
    <label class="field"><span>Tujuan</span><select id="out-purpose" data-gen="${d.gen}">${Object.entries(PURPOSE).map(([k,v])=>`<option value="${k}" ${d.purpose===k?'selected':''}>${v}</option>`).join('')}</select></label>
    <label class="field"><span>Tanggal</span><input id="out-date" type="date" value="${d.doc_date}"></label>
@@ -563,16 +570,43 @@ function loadPdfJs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib
   return pdfLoad=pdfLoad||new Promise((ok,bad)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
     sc.onload=()=>{ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; ok(pdfjsLib); }; sc.onerror=()=>{pdfLoad=null;bad(new Error('Pembaca PDF gagal dimuat. Cek internet.'))}; document.head.appendChild(sc); }); }
 async function pdfPages(file){ const lib=await loadPdfJs(); const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise; const pages=[];
-  for(let i=1;i<=doc.numPages;i++){ const tc=await (await doc.getPage(i)).getTextContent(); const rows={};
-    tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; const y=Math.round(it.transform[5]/3); (rows[y]=rows[y]||[]).push(it); });
-    pages.push(Object.keys(rows).sort((a,b)=>b-a).map(y=>rows[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(it=>it.str.trim()).join(' ')).join('\n')); }
+  for(let i=1;i<=doc.numPages;i++){ const tc=await (await doc.getPage(i)).getTextContent(); const rows={}, items=[];
+    tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; items.push({s:it.str.trim(),x:it.transform[4],y:it.transform[5]}); const y=Math.round(it.transform[5]/3); (rows[y]=rows[y]||[]).push(it); });
+    pages.push({text:Object.keys(rows).sort((a,b)=>b-a).map(y=>rows[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(it=>it.str.trim()).join(' ')).join('\n'),items}); }
   return pages; }
 const normTxt=t=>String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-function parseResi(text){
-  const T=text, U=T.toUpperCase();
-  const platform=/tiktok/i.test(T)?'tiktok':/shopee/i.test(T)?'shopee':/tokopedia/i.test(T)?'tokopedia':/lazada/i.test(T)?'lazada':'';
+/* Tabel produk di resi (Shopee: # | Nama Produk | SKU | Variasi | Qty). Teks yang terpotong ke baris
+   berikutnya (mis. "CHEM-" + "H2SO4-1KG") disambung per kolom berdasarkan posisinya. */
+function resiTable(items){ const out=[]; const near=(a,b)=>Math.abs(a-b)<2.5;
+  const heads=items.filter(h=>/^sku$/i.test(h.s)).map(h=>{ const line=items.filter(o=>near(o.y,h.y)).sort((a,b)=>a.x-b.x);
+    const col=k=>line.find(o=>k.test(o.s)); return {y:h.y,cols:[['no',col(/^(#|no\.?)$/i)],['name',col(/nama|produk|product/i)],['sku',h],['var',col(/variasi|varian|variation/i)],['qty',col(/^(qty|jml|jumlah|kuantitas|quantity)$/i)]].filter(c=>c[1]).map(([k,o])=>({k,x:o.x}))}; })
+    .filter(h=>h.cols.some(c=>c.k==='qty'));
+  heads.sort((a,b)=>b.y-a.y).forEach((h,hi)=>{ const next=heads[hi+1]?.y??-1e9;
+    const stop=Math.max(next,...items.filter(o=>o.y<h.y&&/^(pesan|catatan|note)\b/i.test(o.s)).map(o=>o.y));
+    const body=items.filter(o=>o.y<h.y-1&&o.y>stop+0.5).sort((a,b)=>b.y-a.y||a.x-b.x); let cur=null;
+    const colOf=o=>{ let c=null; h.cols.forEach(k=>{ if(k.x<=o.x+3) c=k.k; }); return c; };
+    body.forEach(o=>{ const c=colOf(o); if(!c) return;
+      if((c==='no'&&/^\d+\.?$/.test(o.s))||(!cur&&c!=='no')){ cur={sku:'',name:'',var:'',qty:0}; out.push(cur); if(c==='no') return; }
+      if(!cur) return;
+      if(c==='sku') cur.sku+=o.s.replace(/\s+/g,''); else if(c==='name') cur.name+=(cur.name?' ':'')+o.s; else if(c==='var') cur.var+=(cur.var?' ':'')+o.s; else if(c==='qty'&&!cur.qty&&/^\d{1,5}$/.test(o.s)) cur.qty=+o.s; }); });
+  return out.filter(r=>r.sku||r.name); }
+const findCode=c=>{ const u=String(c||'').toUpperCase(); if(!u) return null; const b=G.bundles.find(x=>x.active&&x.sku===u); if(b) return {sku:b.sku,bundle:true}; const p=G.products.find(x=>x.active&&x.sku===u); return p?{sku:p.sku}:null; };
+function matchByName(txt){ const t=normTxt(txt); let best=null;
+  G.products.filter(p=>p.active).forEach(p=>{ const nn=normTxt(p.name); if(nn.length>=8&&t.includes(nn)&&(!best||nn.length>normTxt(best.name).length)) best=p; });
+  return best?{sku:best.sku}:null; }
+function parseResi(pg){
+  const T=pg.text||'';
   const m=T.match(/(?:no\.?\s*pesanan|nomor\s*pesanan|order\s*id|order\s*no\.?|no\.?\s*order|invoice)\s*[:#]?\s*([A-Z0-9][A-Z0-9\/-]{5,})/i);
-  const lines=T.split('\n'), items=[];
+  const ref=m?m[1]:'';
+  let platform=/tiktok/i.test(T)?'tiktok':/shopee/i.test(T)?'shopee':/tokopedia/i.test(T)?'tokopedia':/lazada/i.test(T)?'lazada':'';
+  if(!platform&&/^\d{6}[A-Z0-9]{8}$/.test(ref)) platform='shopee'; else if(!platform&&/^\d{17,19}$/.test(ref)) platform='tiktok';
+  const items=[]; const add=(hit,qty,raw)=>{ if(hit){ const ex=items.find(x=>x.sku===hit.sku); if(ex) ex.qty+=qty||1; else items.push({sku:hit.sku,bundle:!!hit.bundle,qty:qty||1,guess:!qty}); } else items.push({sku:'',raw,qty:qty||1,guess:!qty,unknown:true}); };
+  const rows=resiTable(pg.items||[]);
+  // SKU ada tapi belum terdaftar → minta dipilih, jangan ditebak dari nama
+  if(rows.length){ rows.forEach(r=>{ const hit=r.sku?findCode(r.sku):(findCode((r.var.match(/[A-Za-z0-9._-]{3,}/)||[''])[0])||matchByName(r.name+' '+r.var)); add(hit,r.qty,[r.sku,r.name.slice(0,60),r.var].filter(Boolean).join(' · ')); });
+    return {ref,platform,items,text:T,table:true}; }
+  // Tanpa tabel: cari kode SKU / nama di setiap baris teks
+  const lines=T.split('\n');
   const qtyIn=l=>{ const r=l.match(/(?:qty|jumlah|jml|kuantitas)\s*[:x]?\s*(\d{1,4})/i)||l.match(/\bx\s*(\d{1,4})\b/i)||l.match(/\b(\d{1,4})\s*(?:pcs|x)\b/i); return r?+r[1]:0; };
   const hit=new Set();
   G.bundles.filter(b=>b.active).forEach(b=>{ const re=new RegExp('(^|[^A-Z0-9-])'+b.sku.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![A-Z0-9-])'); const li=lines.findIndex(l=>re.test(l.toUpperCase())); if(li<0) return;
@@ -581,26 +615,54 @@ function parseResi(text){
     let li=lines.findIndex(l=>re.test(l.toUpperCase()));
     if(li<0){ const nn=normTxt(p.name); if(nn.length>=8){ li=lines.findIndex(l=>normTxt(l).includes(nn)); if(li<0){ li=lines.findIndex((l,i)=>normTxt(l+' '+(lines[i+1]||'')).includes(nn)); if(li>=0&&!normTxt(lines[li]).includes(nn.split(' ')[0])) li++; } } }
     if(li<0||(hit.has(li)&&!re.test(lines[li].toUpperCase()))) return; const qn=qtyIn(lines[li])||qtyIn(lines[li+1]||''); items.push({sku:p.sku,qty:qn||1,guess:!qn}); });
-  return {ref:m?m[1]:'',platform,items,text:T}; }
+  return {ref,platform,items,text:T}; }
+const resiReady=r=>r.items.length&&r.items.every(it=>it.sku)&&!r.dup&&!r.saved&&!r.skip;
+/* Daftar ambil: semua resi siap digabung per kode barang; bundling dipecah jadi isinya */
+function pickData(R){ const comp={}, bund_={}; let n=0;
+  R.filter(resiReady).forEach(r=>{ n++; r.items.forEach(it=>{ const q=num(it.qty); if(!(q>0)) return; const b=bund(it.sku);
+    if(b){ const x=bund_[b.sku]=bund_[b.sku]||{sku:b.sku,name:b.name,qty:0,orders:0,items:b.items}; x.qty+=q; x.orders++; b.items.forEach(i=>{ const c=comp[i.sku]=comp[i.sku]||{sku:i.sku,qty:0,from:[]}; c.qty+=q*num(i.qty); if(!c.from.includes(b.name)) c.from.push(b.name); }); }
+    else { const c=comp[it.sku]=comp[it.sku]||{sku:it.sku,qty:0,from:[]}; c.qty+=q; } }); });
+  return {comp:Object.values(comp).sort((a,b)=>a.sku.localeCompare(b.sku)),bund:Object.values(bund_),n}; }
+function unknownRaws(R){ const m={}; R.forEach((r,i)=>{ if(r.dup||r.saved||r.skip) return; r.items.forEach((it,j)=>{ if(it.sku) return; const k=it.raw||'(tanpa kode)'; const x=m[k]=m[k]||{raw:k,code:(k.split(' · ')[0]||''),qty:0,resi:0,refs:[]}; x.qty+=num(it.qty); x.resi++; x.refs.push(i+':'+j); }); }); return Object.values(m); }
 async function readResiFiles(files){ const out=[];
   for(const f of files){ const pages=await pdfPages(f);
-    pages.forEach(pg=>{ const r=parseResi(pg); if(!r.ref&&!r.items.length&&!pg.trim()) return;
-      const prev=out[out.length-1]; if(prev&&!r.ref&&prev.file===f.name){ r.items.forEach(it=>{ if(!prev.items.some(x=>x.sku===it.sku)) prev.items.push(it); }); prev.text+='\n'+pg; return; }
+    pages.forEach(pg=>{ const r=parseResi(pg); if(!r.ref&&!r.items.length&&!pg.text.trim()) return;
+      const prev=out[out.length-1]; if(prev&&!r.ref&&prev.file===f.name){ r.items.forEach(it=>{ if(!it.sku||!prev.items.some(x=>x.sku===it.sku)) prev.items.push(it); }); prev.text+='\n'+pg.text; return; }
       out.push({...r,file:f.name}); }); }
   const refs=out.map(r=>r.ref).filter(Boolean);
   const dup=refs.length?await sel('v_outbounds',x=>x.in('ref',refs).neq('status','rejected')):[];
   out.forEach(r=>{ r.dup=dup.some(o=>o.ref===r.ref); if(!r.platform) r.platform=['shopee','tiktok','tokopedia','lazada','website','b2b','offline'].includes(G.ui.outD?.purpose)?G.ui.outD.purpose:'shopee'; });
   return out; }
-function resiPanel(){ const R=G.ui.resi||[]; const ready=R.filter(r=>r.items.length&&!r.dup&&!r.saved);
+function resiPanel(lots){ const R=G.ui.resi||[]; const ready=R.filter(resiReady); const P=pickData(R), U=unknownRaws(R); const ok=G.ui.pickOk||{};
+  const fefo=(sku,qty)=>{ let left=qty; const t=[]; (lots||[]).filter(l=>l.sku===sku&&l.ed_status!=='kedaluwarsa').sort((a,b)=>String(a.ed||'9').localeCompare(String(b.ed||'9'))).forEach(l=>{ if(left<=0) return; const n=Math.min(num(l.qty),left); t.push({ed:l.ed,st:l.ed_status,qty:n}); left-=n; }); return {t,short:left,have:(lots||[]).filter(l=>l.sku===sku&&l.ed_status!=='kedaluwarsa').reduce((a,l)=>a+num(l.qty),0)}; };
+  const checked=P.comp.filter(c=>ok[c.sku]===c.qty).length, allOk=P.comp.length>0&&checked===P.comp.length, short=P.comp.some(c=>fefo(c.sku,c.qty).short>0);
+  const opts=`<option value="">— pilih barang —</option>${G.products.filter(p=>p.active).map(p=>`<option value="${esc(p.sku)}">${esc(p.sku)} — ${esc(p.name)}</option>`).join('')}${G.bundles.filter(b=>b.active).map(b=>`<option value="${esc(b.sku)}">${esc(b.sku)} — ${esc(b.name)} (bundling)</option>`).join('')}`;
   return `<section class="panel"><h2>Cara cepat: upload PDF resi</h2>
    <p class="small muted">Unduh PDF resi/label pengiriman dari Shopee, TikTok Shop, dll. (boleh banyak resi sekaligus), upload di sini. Aplikasi membaca no. pesanan, produk, dan jumlahnya. Cek dulu, lalu simpan.</p>
+   <details><summary class="small"><b>Supaya barang di resi terbaca otomatis</b></summary><div class="small skuguide"><p>Aplikasi mencocokkan kolom <b>SKU</b> di resi dengan <b>Kode SKU</b> barang di sistem. Jadi kode SKU di menu Produk harus <b>sama persis</b> dengan SKU di Shopee / TikTok (Shopee: Produk Saya → Ubah → SKU Induk / SKU Variasi).</p>
+    <ul><li>Contoh resi Shopee kolom SKU <span class="code">CHEM-H2SO4-1KG</span> → daftarkan barang dengan kode <span class="code">CHEM-H2SO4-1KG</span>.</li>
+    <li>Variasi yang isinya kelipatan barang lain (mis. <span class="code">CHEM-H2SO4-5KG</span> = 5 × 1 kg) → buat <b>SKU bundling</b> dengan kode itu, isinya 5 × CHEM-H2SO4-1KG.</li>
+    <li>Kalau SKU di resi kosong / belum terdaftar, baris ditandai kuning dan kamu tinggal pilih barangnya.</li></ul></div></details>
    <div class="row"><label class="btn tape" for="resi-file">Pilih PDF resi</label><input id="resi-file" type="file" accept="application/pdf,.pdf" multiple hidden>${R.length?'<button class="btn ghost" data-act="resi-clear">Hapus hasil baca</button>':''}</div>
-   ${R.length?`<div class="tbl"><table><thead><tr><th>No. pesanan</th><th>Platform</th><th>Barang terbaca</th><th>Status</th></tr></thead><tbody>${R.map((r,i)=>`<tr><td><input data-rref="${i}" value="${esc(r.ref)}" placeholder="isi no. pesanan" style="min-height:38px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:4px 8px;width:100%;min-width:150px"><div class="small muted">${esc(r.file)}</div></td>
+   ${U.length?`<div class="panel hl" style="border-color:var(--bad)"><b style="color:var(--bad)">⚠ ${U.length} kode SKU dari resi belum terdaftar</b>
+     <p class="small">Pilih barangnya sekali — langsung berlaku untuk semua resi dengan kode yang sama. Supaya berikutnya otomatis, daftarkan barang dengan kode yang sama persis di menu Produk.</p>
+     <div class="tbl"><table><thead><tr><th>Kode di resi</th><th class="n">Resi</th><th class="n">Qty</th><th>Pakai barang</th></tr></thead><tbody>${U.map(u=>`<tr><td><span class="code">${esc(u.code||'(kosong)')}</span><div class="small muted">${esc(u.raw.split(' · ').slice(1).join(' · '))}</div></td><td class="n">${u.resi}</td><td class="n qty">${q(u.qty)}</td><td><select data-rmapall="${esc(u.raw)}" style="min-height:36px;max-width:340px">${opts}</select></td></tr>`).join('')}</tbody></table></div></div>`:''}
+   ${P.comp.length?`<div class="panel" id="print-area" style="background:var(--paper)"><div class="row between"><h2>Daftar ambil barang di gudang</h2><button class="btn sm" data-act="pick-print">Cetak</button></div>
+     <p class="small muted">${P.n} resi digabung per barang${P.bund.length?', paket bundling sudah dipecah jadi isinya':''}. Ambil sesuai ED yang ditunjuk, hitung, lalu centang. Kalau jumlah fisik beda, betulkan qty di rincian resi di bawah.</p>
+     <div class="picks">${P.comp.map(c=>{ const p=prod(c.sku), f=fefo(c.sku,c.qty), on=ok[c.sku]===c.qty; return `<label class="pick${on?' on':''}"><input type="checkbox" data-pick="${esc(c.sku)}" data-q="${c.qty}" ${on?'checked':''} aria-label="Sudah diambil">
+       <div class="pthumb">${prodPic(p||{name:c.sku,sku:c.sku})}</div>
+       <div class="pk-info"><b>${esc(p?.name||c.sku)}</b><span class="small muted code">${esc(c.sku)} · stok ${q(f.have)}</span>${c.from.length?`<span class="small muted">termasuk isi: ${esc(c.from.join(', '))}</span>`:''}
+        <span class="small">${f.t.map(x=>`${q(x.qty)} × ${edBadge(x.ed,x.st)}`).join(' ')}${f.short>0?` <span class="badge b-bad">stok kurang ${q(f.short)}</span>`:''}</span></div>
+       <div class="pk-qty"><b>${q(c.qty)}</b><span>pcs</span></div></label>`; }).join('')}</div>
+     <div class="row between small"><b>Total ${q(P.comp.reduce((a,c)=>a+c.qty,0))} pcs · ${P.comp.length} jenis barang</b><span>${checked}/${P.comp.length} sudah dicek</span></div>
+     ${P.bund.length?`<b>Paket bundling (sudah termasuk di daftar atas)</b><div class="picks">${P.bund.map(b=>`<div class="pick"><div class="pk-info"><b>${esc(b.name)}</b><span class="small muted code">${esc(b.sku)} · ${b.orders} resi</span><span class="small">Isi per paket: ${b.items.map(i=>`${q(i.qty)} × ${esc(i.name)}`).join(', ')}</span><span class="small">Total isi: ${b.items.map(i=>`<b>${q(num(i.qty)*b.qty)}</b> × ${esc(i.name)}`).join(', ')}</span></div><div class="pk-qty"><b>${q(b.qty)}</b><span>paket</span></div></div>`).join('')}</div>`:''}</div>`:''}
+   ${R.length?`<details ${U.length||!P.comp.length?'open':''}><summary><b>Rincian per resi (${R.length})</b> <span class="small muted">— koreksi qty / platform / lewati resi di sini</span></summary><div class="tbl"><table><thead><tr><th>No. pesanan</th><th>Platform</th><th>Barang terbaca</th><th>Status</th></tr></thead><tbody>${R.map((r,i)=>`<tr><td><input data-rref="${i}" value="${esc(r.ref)}" placeholder="isi no. pesanan" style="min-height:38px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:4px 8px;width:100%;min-width:150px"><div class="small muted">${esc(r.file)}</div></td>
      <td><select data-rplat="${i}" style="min-height:38px">${['shopee','tiktok','tokopedia','lazada','website','b2b','offline'].map(k=>`<option value="${k}" ${r.platform===k?'selected':''}>${PURPOSE[k]}</option>`).join('')}</select></td>
-     <td class="small">${r.items.length?r.items.map((it,j)=>`<div class="row" style="gap:6px;flex-wrap:nowrap"><input type="number" min="0" data-rqty="${i}:${j}" value="${it.qty}" style="width:64px;min-height:34px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:2px 6px"> × ${esc(bund(it.sku)?.name||prod(it.sku)?.name||it.sku)}${it.bundle?' <span class="badge b-info">Bundling</span>':''}${it.guess?' <span class="badge b-warn">cek jumlah</span>':''}</div>`).join(''):'<span class="badge b-bad">Produk tidak dikenali</span><div class="muted">Input manual di bawah</div>'}
+     <td class="small">${r.items.length?r.items.map((it,j)=>`<div class="row" style="gap:6px;flex-wrap:nowrap"><input type="number" min="0" data-rqty="${i}:${j}" value="${it.qty}" style="width:64px;min-height:34px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:2px 6px"> × ${it.sku?esc(bund(it.sku)?.name||prod(it.sku)?.name||it.sku):`<span><span class="badge b-warn">Belum terdaftar</span> <span class="code">${esc(it.raw||'')}</span><br><select data-rmap="${i}:${j}" style="min-height:34px;max-width:320px;margin-top:4px">${opts}</select></span>`}${it.bundle?' <span class="badge b-info">Bundling</span>':''}${it.guess?' <span class="badge b-warn">cek jumlah</span>':''}</div>`).join(''):'<span class="badge b-bad">Produk tidak dikenali</span><div class="muted">Input manual di bawah</div>'}
        <details><summary class="muted">Lihat teks resi</summary><div class="pre small" style="max-height:160px;overflow:auto">${esc(r.text)}</div></details></td>
-     <td>${r.saved?`<span class="badge b-ok">Tersimpan ${esc(r.saved)}</span>`:r.dup?'<span class="badge b-warn">Sudah pernah diinput</span>':r.items.length?'<span class="badge b-info">Siap</span>':'<span class="badge b-bad">Tidak bisa</span>'}</td></tr>`).join('')}</tbody></table></div>
-   <div class="row"><button class="btn primary" data-act="resi-save" ${ready.length?'':'disabled'}>Simpan ${ready.length} resi sebagai barang keluar</button></div>`:''}</section>`; }
+     <td>${r.saved||r.dup?'':`<button class="btn ghost sm" data-act="resi-skip" data-i="${i}">${r.skip?'Pakai lagi':'Lewati'}</button>`}${r.skip?'<span class="badge b-neu">Dilewati</span>':r.saved?`<span class="badge b-ok">Tersimpan ${esc(r.saved)}</span>`:r.dup?'<span class="badge b-warn">Sudah pernah diinput</span>':!r.items.length?'<span class="badge b-bad">Tidak bisa</span>':r.items.some(it=>!it.sku)?'<span class="badge b-warn">Pilih barangnya</span>':'<span class="badge b-info">Siap</span>'}</td></tr>`).join('')}</tbody></table></div></details>
+   <div class="row"><button class="btn primary" data-act="resi-save" ${ready.length&&allOk&&!short?'':'disabled'}>Simpan ${ready.length} resi sebagai barang keluar</button>
+    <span class="small muted">${!ready.length?'':short?'Ada barang yang stoknya kurang.':!allOk?`Centang dulu semua barang di daftar ambil (${checked}/${P.comp.length}).`:U.length?'Resi yang barangnya belum dipilih tidak ikut disimpan.':'Siap disimpan.'}</span></div>`:''}</section>`; }
 function prodPic(p){ const ph=p&&G.photos[p.sku]; return ph?`<img src="${ph}" alt="">`:prodIcon(p||{name:''}); }
 function prodIcon(p){ const n=(p.name+' '+(p.sku||'')).toLowerCase(); const c='fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
   if(/roll ?on/.test(n)) return `<svg viewBox="0 0 32 32" ${c}><rect x="10" y="12" width="12" height="17" rx="3"/><path d="M12 12V8a4 4 0 0 1 8 0v4"/><circle cx="16" cy="8" r="2"/></svg>`;
@@ -860,9 +922,11 @@ A['out-add']=()=>{ outSync(); const p=readItem('out-sku'), qty=num($('#out-qty')
   if(!p) return banner('bad','PRODUK BELUM DIPILIH','Ketik kode SKU atau nama barang, lalu pilih dari daftar'); if(!(qty>0)) return banner('bad','JUMLAH BELUM DIISI','');
   const ex=G.ui.outD.lines.find(l=>l.sku===p.sku); if(ex) ex.qty+=qty; else G.ui.outD.lines.push({sku:p.sku,qty});
   G.ui['out-sku']=''; G.ui['out-qty']=''; $('#out-qty').value=''; banner('ok','DITAMBAHKAN',`${p.name} · ${q(qty)} pcs`); renderView(); };
-A['resi-clear']=()=>{ G.ui.resi=[]; renderView(); };
+A['resi-clear']=()=>{ G.ui.resi=[]; G.ui.pickOk={}; renderView(); };
+A['resi-skip']=d=>{ const r=G.ui.resi[+d.i]; r.skip=!r.skip; renderView(); };
+A['pick-print']=()=>window.print();
 A['resi-save']=(d,e,btn)=>busy(btn,async()=>{ const R=G.ui.resi||[]; let n=0, fail=[];
-  for(const r of R){ if(!r.items.length||r.dup||r.saved) continue; const lines=r.items.filter(it=>it.qty>0).map(it=>({sku:it.sku,qty:it.qty})); if(!lines.length) continue;
+  for(const r of R){ if(!resiReady(r)) continue; const lines=r.items.filter(it=>it.qty>0).map(it=>({sku:it.sku,qty:it.qty})); if(!lines.length) continue;
     try{ const x=await rpc('create_outbound',{p:{purpose:r.platform,doc_date:today(),ref:r.ref,customer:'',note:'Dari PDF resi',lines}}); r.saved=x.doc_no; n++; }catch(err){ fail.push((r.ref||r.file)+': '+errMsg(err)); } }
   if(fail.length) banner('bad',`${n} TERSIMPAN, ${fail.length} GAGAL`,fail.join(' | ')); else banner('ok',`${n} RESI TERSIMPAN`,'Stok sudah berkurang'); renderView(); });
 A['out-del']=d=>{ outSync(); G.ui.outD.lines.splice(+d.i,1); renderView(); };
@@ -991,11 +1055,19 @@ document.addEventListener('change',async e=>{ const t=e.target, id=t.id; liveSyn
     try{ banner('info','MENGUNGGAH FOTO…',sku); const data=await shrink(f,320,'image/jpeg',.8); await rpc('set_product_photo',{p_sku:sku,p_photo:data}); G.photos[sku]=data; banner('ok','FOTO DISIMPAN',prod(sku)?.name||sku); }
     catch(err){ banner('bad','FOTO GAGAL',errMsg(err)); } renderView(); }
   if(id==='resi-file'&&t.files.length){ const files=[...t.files]; t.value=''; banner('info','MEMBACA PDF…',files.length+' file');
-    try{ G.ui.resi=[...(G.ui.resi||[]),...await readResiFiles(files)]; const R=G.ui.resi; banner(R.some(r=>r.items.length)?'ok':'bad',`${R.length} RESI TERBACA`,R.filter(r=>!r.items.length).length?'Ada resi yang produknya tidak dikenali, cek tabel':'Cek jumlahnya, lalu simpan'); }
+    try{ G.ui.resi=[...(G.ui.resi||[]),...await readResiFiles(files)]; const R=G.ui.resi, U=unknownRaws(R);
+      if(U.length) banner('bad',`${R.length} RESI TERBACA · ${U.length} KODE BELUM TERDAFTAR`,U.map(u=>u.code||'(kosong)').slice(0,4).join(', ')+' — pilih barangnya di kotak merah');
+      else banner(R.some(r=>r.items.length)?'ok':'bad',`${R.length} RESI TERBACA`,R.filter(r=>!r.items.length).length?'Ada resi yang produknya tidak dikenali, cek tabel':'Cek daftar ambil barang, centang, lalu simpan'); }
     catch(err){ banner('bad','PDF TIDAK TERBACA',errMsg(err)); } renderView(); }
   if(t.dataset.rref) G.ui.resi[+t.dataset.rref].ref=t.value.trim();
   if(t.dataset.rplat) G.ui.resi[+t.dataset.rplat].platform=t.value;
-  if(t.dataset.rqty){ const [i,j]=t.dataset.rqty.split(':').map(Number); const it=G.ui.resi[i].items[j]; it.qty=Math.max(0,num(t.value)); it.guess=false; }
+  if(t.dataset.pick!==undefined){ G.ui.pickOk=G.ui.pickOk||{}; if(t.checked) G.ui.pickOk[t.dataset.pick]=num(t.dataset.q); else delete G.ui.pickOk[t.dataset.pick]; renderView(); }
+  if(t.dataset.rmapall!==undefined&&t.value){ const raw=t.dataset.rmapall; (G.ui.resi||[]).forEach(r=>r.items.forEach(it=>{ if(!it.sku&&(it.raw||'(tanpa kode)')===raw){ it.sku=t.value; it.bundle=!!bund(t.value); it.unknown=false; } }));
+    // gabungkan baris kembar dalam satu resi
+    (G.ui.resi||[]).forEach(r=>{ const m={}; r.items=r.items.filter(it=>{ if(!it.sku) return true; if(m[it.sku]){ m[it.sku].qty+=num(it.qty); return false; } m[it.sku]=it; return true; }); });
+    banner('ok','BARANG DIPILIH','Berlaku untuk semua resi dengan kode ini'); renderView(); }
+  if(t.dataset.rmap&&t.value){ const [i,j]=t.dataset.rmap.split(':').map(Number); const it=G.ui.resi[i].items[j]; it.sku=t.value; it.bundle=!!bund(t.value); it.unknown=false; renderView(); }
+  if(t.dataset.rqty){ const [i,j]=t.dataset.rqty.split(':').map(Number); const it=G.ui.resi[i].items[j]; it.qty=Math.max(0,num(t.value)); it.guess=false; renderView(); }
   if(id==='in-photo'&&t.files[0]){ try{ inSync(); G.ui.inD.photo=await shrink(t.files[0],1000,'image/jpeg',.6); renderView(); banner('ok','FOTO DILAMPIRKAN',''); }catch(err){ banner('bad','FOTO GAGAL',errMsg(err)); } }
   if(id==='sc-photo'&&t.files[0]) decodePhoto(t.files[0]);
   if(id==='stok-brand'){ G.ui.sb=t.value; renderView(); }
