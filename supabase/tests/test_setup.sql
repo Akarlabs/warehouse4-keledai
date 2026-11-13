@@ -304,6 +304,70 @@ select test.eq(public.save_bundles('[{"sku":"SHP-B1","name":"Paket B1","items":[
 select test.err($$select public.save_bundles('[{"sku":"SHP-B3","name":"x","items":[{"sku":"TIDAK-ADA","qty":1}]}]')$$, 'Bundling SHP-B3');
 select test.eq((select count(*) from public.v_bundles where sku='SHP-B3'), 0::bigint, 'bundling gagal tidak tersimpan sebagian');
 
+-- ---------- Stock opname tidak boleh menghapus barang keluar ----------
+select test.login('owner@k4.id');
+select public.save_product('{"sku":"SO-A","name":"SO A","brand_code":"DKM","track_ed":false}');
+select public.save_product('{"sku":"SO-ED","name":"SO Personal Care","brand_code":"ZDO","track_ed":true}');
+select public.create_inbound('{"source":"lainnya","lines":[{"sku":"SO-A","qty":100}]}');
+select test.login('staf@k4.id');
+select public.so_start('uji beku') as so2 \gset
+select public.so_save(:'so2'::uuid, (select jsonb_agg(jsonb_build_object('sku', sku, 'counted', coalesce((select x.qty from public.v_stock x where x.sku = l.sku), 0))) from public.v_opname_lines l where opname_id = :'so2'::uuid));
+select public.so_submit(:'so2'::uuid);
+-- barang keluar SETELAH hasil hitung dikirim
+select public.create_outbound('{"purpose":"shopee","ref":"SO-ORDER-1","lines":[{"sku":"SO-A","qty":5}]}');
+select test.eq((select qty from public.v_stock where sku='SO-A'), 95.000, 'stok berkurang setelah dikirim');
+select test.login('owner@k4.id');
+select public.so_approve(:'so2'::uuid);
+select test.eq((select qty from public.v_stock where sku='SO-A'), 95.000, 'SO disetujui TIDAK mengembalikan barang yang sudah dikirim');
+select test.eq((select count(*) from public.v_moves where sku='SO-A' and kind='so'), 0::bigint, 'tidak ada penyesuaian palsu');
+
+-- selisih nyata tetap diterapkan walau stok berubah setelahnya
+select test.login('staf@k4.id');
+select public.so_start('uji selisih') as so3 \gset
+select public.so_save(:'so3'::uuid, (select jsonb_agg(jsonb_build_object('sku', sku, 'counted', case when sku='SO-A' then 93 else coalesce((select x.qty from public.v_stock x where x.sku = l.sku), 0) end)) from public.v_opname_lines l where opname_id = :'so3'::uuid));
+select public.so_submit(:'so3'::uuid);
+select public.so_set_reasons(:'so3'::uuid, '[{"sku":"SO-A","reason":"rusak tidak dilaporkan"}]');
+select public.create_outbound('{"purpose":"shopee","ref":"SO-ORDER-2","lines":[{"sku":"SO-A","qty":10}]}');
+select test.login('owner@k4.id');
+select public.so_approve(:'so3'::uuid);
+select test.eq((select qty from public.v_stock where sku='SO-A'), 83.000, 'selisih -2 diterapkan di atas stok terkini (95-10-2)');
+
+-- surplus produk ber-ED yang belum punya stok ber-ED ditolak, bukan dibuat tanpa ED
+select test.login('staf@k4.id');
+select public.so_start('uji ed') as so4 \gset
+select public.so_save(:'so4'::uuid, (select jsonb_agg(jsonb_build_object('sku', sku, 'counted', case when sku='SO-ED' then 7 else coalesce((select x.qty from public.v_stock x where x.sku = l.sku), 0) end)) from public.v_opname_lines l where opname_id = :'so4'::uuid));
+select public.so_submit(:'so4'::uuid);
+select public.so_set_reasons(:'so4'::uuid, '[{"sku":"SO-ED","reason":"ketemu di rak"}]');
+select test.login('owner@k4.id');
+select test.err(format($$select public.so_approve(%L)$$, :'so4'::uuid), 'wajib dicatat ED');
+select test.eq((select count(*) from public.v_lots where sku='SO-ED'), 0::bigint, 'tidak ada stok tanpa ED yang terbentuk');
+select public.so_cancel(:'so4'::uuid);
+
+-- surplus produk ber-ED menempel ke ED terdekat yang masih ada stoknya
+select test.login('staf@k4.id');
+select public.create_inbound('{"source":"lainnya","lines":[{"sku":"SO-ED","ed":"2030-01-31","qty":3},{"sku":"SO-ED","ed":"2029-03-31","qty":2}]}');
+select public.so_start('uji ed2') as so5 \gset
+select public.so_save(:'so5'::uuid, (select jsonb_agg(jsonb_build_object('sku', sku, 'counted', case when sku='SO-ED' then 9 else coalesce((select x.qty from public.v_stock x where x.sku = l.sku), 0) end)) from public.v_opname_lines l where opname_id = :'so5'::uuid));
+select public.so_submit(:'so5'::uuid);
+select public.so_set_reasons(:'so5'::uuid, '[{"sku":"SO-ED","reason":"salah hitung minggu lalu"}]');
+select test.eq((select stok_sekarang from public.v_opname_lines where opname_id=:'so5'::uuid and sku='SO-ED'), 5.000, 'owner melihat stok terkini saat memeriksa SO');
+select test.login('owner@k4.id');
+select public.so_approve(:'so5'::uuid);
+select test.eq((select qty from public.v_lots where sku='SO-ED' and ed='2029-03-31'), 6.000, 'surplus menempel ke ED terdekat, bukan tanpa ED');
+select test.eq((select count(*) from public.v_lots where sku='SO-ED' and ed is null), 0::bigint, 'tidak ada lot tanpa ED');
+
+-- selisih minus yang tidak bisa diterapkan karena stok keburu habis → ditolak dengan jelas
+select test.login('staf@k4.id');
+select public.so_start('uji minus') as so6 \gset
+select public.so_save(:'so6'::uuid, (select jsonb_agg(jsonb_build_object('sku', sku, 'counted', case when sku='SO-A' then 3 else coalesce((select x.qty from public.v_stock x where x.sku = l.sku), 0) end)) from public.v_opname_lines l where opname_id = :'so6'::uuid));
+select public.so_submit(:'so6'::uuid);
+select public.so_set_reasons(:'so6'::uuid, '[{"sku":"SO-A","reason":"hilang"}]');
+select public.create_outbound('{"purpose":"shopee","ref":"SO-ORDER-3","lines":[{"sku":"SO-A","qty":82}]}');
+select test.login('owner@k4.id');
+select test.err(format($$select public.so_approve(%L)$$, :'so6'::uuid), 'sudah berubah sejak dihitung');
+select test.eq((select qty from public.v_stock where sku='SO-A'), 1.000, 'stok tidak rusak saat SO ditolak');
+select public.so_cancel(:'so6'::uuid);
+
 -- ---------- Integritas ----------
 reset role;
 select test.eq((select count(*) from (select sku, ed, sum(qty) q from public.moves group by 1,2) m

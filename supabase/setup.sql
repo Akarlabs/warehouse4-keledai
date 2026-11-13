@@ -780,16 +780,17 @@ end $$;
 -- Kurang: dikurangi dari ED terdekat. Lebih: ditambahkan ke ED terlama yang ada.
 create or replace function public.so_approve(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
-declare o public.opnames; l record; lot record; v_left numeric; v_n int; v_ed date;
+declare o public.opnames; l record; lot record; v_left numeric; v_n int; v_ed date; v_now numeric;
 begin
   perform public._require('owner');
   select * into o from public.opnames where id = p_id for update;
   if not found or o.status <> 'submitted' then raise exception 'SO ini belum dikirim untuk disetujui'; end if;
   select count(*) into v_n from public.opname_lines where opname_id = p_id and diff <> 0 and coalesce(reason,'') = '';
   if v_n > 0 then raise exception 'Masih ada % selisih tanpa alasan', v_n; end if;
-  -- stok bisa berubah sejak dihitung: pakai stok saat ini sebagai acuan
-  update public.opname_lines x set system_qty = coalesce((select sum(qty) from public.lots where sku = x.sku), 0)
-   where x.opname_id = p_id;
+
+  -- PENTING: system_qty DIBEKUKAN saat hasil hitung dikirim dan tidak dihitung ulang di sini.
+  -- Yang diterapkan adalah selisih saat barang dihitung. Barang masuk/keluar yang terjadi
+  -- setelah hitungan tetap berlaku dan tidak ikut terhapus.
   for l in select * from public.opname_lines where opname_id = p_id and diff <> 0 order by sku loop
     if l.diff < 0 then
       v_left := -l.diff;
@@ -798,8 +799,20 @@ begin
         perform public._move(l.sku, lot.ed, -least(lot.qty, v_left), 'so', o.doc_no, l.reason);
         v_left := v_left - least(lot.qty, v_left);
       end loop;
+      if v_left > 0 then
+        select coalesce(sum(qty), 0) into v_now from public.lots where sku = l.sku;
+        raise exception 'Stok % sudah berubah sejak dihitung (sekarang %). Selisih % tidak bisa diterapkan — hitung ulang barang ini.',
+          l.sku, public._q(v_now), public._q(l.diff);
+      end if;
     else
-      select ed into v_ed from public.lots where sku = l.sku order by (qty > 0) desc, ed desc nulls last limit 1;
+      -- surplus ditempelkan ke ED terdekat yang masih ada stoknya, supaya tetap terpantau
+      select ed into v_ed from public.lots where sku = l.sku and qty > 0 order by ed nulls last limit 1;
+      if v_ed is null then
+        select ed into v_ed from public.lots where sku = l.sku order by ed desc nulls last limit 1;
+      end if;
+      if v_ed is null and exists (select 1 from public.products where sku = l.sku and track_ed) then
+        raise exception 'Produk % wajib dicatat ED-nya dan belum punya stok ber-ED. Masukkan lewat Barang masuk (pilih ED), jangan lewat stock opname.', l.sku;
+      end if;
       perform public._move(l.sku, v_ed, l.diff, 'so', o.doc_no, l.reason);
     end if;
   end loop;
@@ -983,7 +996,9 @@ create view public.v_opname_lines with (security_barrier) as
          case when o.status = 'counting' then null else l.system_qty end as system_qty,
          case when o.status = 'counting' then null else l.diff end as diff,
          l.reason, l.counted_name,
-         case when public.can_see_cost() and o.status <> 'counting' then round(l.diff * p.cost, 2) end as diff_value
+         case when public.can_see_cost() and o.status <> 'counting' then round(l.diff * p.cost, 2) end as diff_value,
+         -- stok terkini saat hasil hitung menunggu persetujuan, supaya penyetuju tahu stok sudah berubah
+         case when o.status = 'submitted' then coalesce((select sum(x.qty) from public.lots x where x.sku = l.sku), 0) end as stok_sekarang
     from public.opname_lines l join public.opnames o on o.id = l.opname_id join public.products p on p.sku = l.sku
    where public.is_active();
 
