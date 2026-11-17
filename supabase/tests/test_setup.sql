@@ -228,6 +228,23 @@ select test.err(format($$select public.reset_password(%L, 'abcd12345')$$, test.u
 select public.create_outbound('{"purpose":"sampel","note":"endorse","lines":[{"sku":"WT-TCCA90-1KG","qty":1}]}') as out4 \gset
 select test.eq((:'out4'::jsonb)->>'status', 'posted', 'head operasional: barang keluar sampel tanpa menunggu');
 
+-- ---------- Hapus produk (Head Operasional) ----------
+-- produk tanpa riwayat → boleh dihapus permanen
+select public.save_product('{"sku":"DEL-KOSONG","name":"Produk Kosong","brand_code":"DKM","track_ed":false}');
+select public.delete_product('DEL-KOSONG');
+select test.eq((select count(*) from public.v_products where sku='DEL-KOSONG'), 0::bigint, 'produk tanpa riwayat terhapus');
+-- produk yang sudah punya stok → ditolak, suruh nonaktifkan
+select test.err($$select public.delete_product('WT-TCCA90-1KG')$$, 'tidak bisa dihapus');
+select test.eq((select count(*) from public.v_products where sku='WT-TCCA90-1KG'), 1::bigint, 'produk berstok tidak ikut terhapus');
+-- produk tanpa stok tapi jadi isi bundling → ditolak
+select public.save_product('{"sku":"DEL-ISI","name":"Isi Paket","brand_code":"DKM","track_ed":false}');
+select public.save_bundle('{"sku":"DEL-PAKET","name":"Paket Uji","items":[{"sku":"DEL-ISI","qty":1}]}');
+select test.err($$select public.delete_product('DEL-ISI')$$, 'isi paket bundling');
+-- staf gudang tidak boleh menghapus
+select test.login('staf@k4.id');
+select test.err($$select public.delete_product('ZDO-RO-NEW-40')$$, 'Akses ditolak');
+select test.login('baru@k4.id');
+
 -- ---------- Produk ajuan staf gudang ----------
 select test.login('staf@k4.id');
 select test.err($$select public.save_product('{"sku":"X-1","name":"x","brand_code":"ZDO"}')$$, 'Akses ditolak');

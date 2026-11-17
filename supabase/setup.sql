@@ -400,6 +400,36 @@ begin
   return v_sku;
 end $$;
 
+-- Hapus produk permanen. Hanya kalau belum pernah dipakai: tanpa stok, tanpa riwayat,
+-- bukan isi paket bundling, dan tidak tercatat di hasil stock opname. Kalau sudah pernah
+-- dipakai, jangan dihapus — nonaktifkan lewat Ubah (hilangkan centang Aktif), supaya riwayat tetap utuh.
+create or replace function public.delete_product(p_sku text) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_sku text := upper(trim(p_sku)); v_pkt text;
+begin
+  perform public._require('owner','finance');
+  if not exists (select 1 from public.products where sku = v_sku) then
+    raise exception 'Produk % tidak ada', v_sku;
+  end if;
+  if exists (select 1 from public.moves where sku = v_sku) or exists (select 1 from public.lots where sku = v_sku) then
+    raise exception 'Produk % sudah punya riwayat/stok, tidak bisa dihapus. Nonaktifkan saja: Ubah → hilangkan centang Aktif.', v_sku;
+  end if;
+  select string_agg(distinct bundle_sku, ', ') into v_pkt from public.bundle_items where sku = v_sku;
+  if v_pkt is not null then
+    raise exception 'Produk % masih jadi isi paket bundling (%). Keluarkan dari paketnya dulu.', v_sku, v_pkt;
+  end if;
+  if exists (select 1 from public.opname_lines ol join public.opnames o on o.id = ol.opname_id
+             where ol.sku = v_sku and not (o.status = 'counting' and ol.counted is null)) then
+    raise exception 'Produk % tercatat di hasil stock opname, tidak bisa dihapus. Nonaktifkan saja.', v_sku;
+  end if;
+  -- baris SO yang masih placeholder (sedang dihitung, belum diisi) ikut dibersihkan
+  delete from public.opname_lines ol using public.opnames o
+    where ol.opname_id = o.id and ol.sku = v_sku and o.status = 'counting' and ol.counted is null;
+  delete from public.product_photos where sku = v_sku;
+  delete from public.products where sku = v_sku;
+  return v_sku;
+end $$;
+
 -- Staf gudang mengajukan produk baru saat menerima barang (tanpa HPP). Perlu ACC Owner / Head Operasional / Finance.
 -- p: {sku, name, brand_code, track_ed}
 create or replace function public.propose_product(p jsonb) returns text
@@ -1247,7 +1277,8 @@ grant execute on function
   public.save_credential(uuid, text, text), public.reset_password(uuid, text), public.mark_password_changed(),
   public.change_login_id(uuid, text), public.propose_product(jsonb), public.approve_product(text, jsonb), public.reject_product(text),
   public.propose_products(jsonb), public.submit_orders(jsonb, boolean), public.orders_start(text[]),
-  public.order_cancel(text, text), public.order_reopen(text), public.save_bundles(jsonb)
+  public.order_cancel(text, text), public.order_reopen(text), public.save_bundles(jsonb),
+  public.delete_product(text)
 to authenticated;
 
 -- Brand awal (bisa diubah di aplikasi)
