@@ -1099,10 +1099,19 @@ A['ord-cancel-go']=(d,e,btn)=>busy(btn,async()=>{ await rpc('order_cancel',{p_re
 A['ord-reopen']=(d,e,btn)=>busy(btn,async()=>{ await rpc('order_reopen',{p_ref:d.ref}); banner('ok','PESANAN AKTIF LAGI',d.ref+' · kembali ke antrean gudang'); renderView(); });
 A['resi-skip']=d=>{ const r=G.ui.resi[+d.i]; r.skip=!r.skip; renderView(); };
 A['pick-print']=()=>window.print();
-A['resi-save']=(d,e,btn)=>busy(btn,async()=>{ const R=G.ui.resi||[]; let n=0, fail=[];
+/* Tombol ini TIDAK langsung memotong stok — tampilkan dulu konfirmasi apa yang akan keluar */
+A['resi-save']=()=>{ const R=G.ui.resi||[]; const P=pickData(R); if(!P.n||!P.comp.length) return;
+  const rows=P.comp.map(c=>`<div class="pick" style="cursor:default"><b>${esc(prod(c.sku)?.name||c.sku)}</b><b style="color:var(--bad);font-size:1.1rem">−${q(c.qty)} pcs</b></div>`).join('');
+  $('#overlay').innerHTML=`<div class="sheet-bg" data-act="sc-bg"><div class="sheet" role="dialog" aria-label="Konfirmasi barang keluar">
+   <div class="row between"><h3>Keluarkan ${P.n} resi?</h3><button class="btn ghost" data-act="sc-close">Batal</button></div>
+   <p class="small muted">Menekan tombol di bawah <b>langsung memotong stok</b> berikut. Pastikan jumlahnya sudah benar — barang keluar tidak bisa dihapus, hanya bisa dikoreksi.</p>
+   <div style="display:grid;gap:8px;max-height:46vh;overflow:auto">${rows}</div>
+   <div class="row"><button class="btn primary" data-act="resi-save-go">Ya, keluarkan &amp; potong stok</button><button class="btn ghost" data-act="sc-close">Batal, cek dulu</button></div></div></div>`; };
+A['resi-save-go']=(d,e,btn)=>busy(btn,async()=>{ const R=G.ui.resi||[]; let n=0, fail=[];
   for(const r of R){ if(!resiReady(r)) continue; const lines=r.items.filter(it=>it.qty>0).map(it=>({sku:it.sku,qty:it.qty})); if(!lines.length) continue;
     try{ const x=await rpc('create_outbound',{p:{purpose:r.platform,doc_date:today(),ref:r.ref,resi_no:r.resi_no||'',deadline:r.deadline||'',customer:r.customer||'',note:'Dari PDF resi',lines}}); r.saved=x.doc_no; n++; }catch(err){ fail.push((r.ref||r.file)+': '+errMsg(err)); } }
-  if(fail.length) banner('bad',`${n} TERSIMPAN, ${fail.length} GAGAL`,fail.join(' | ')); else banner('ok',`${n} RESI TERSIMPAN`,'Stok sudah berkurang'); renderView(); });
+  closeScanner();
+  if(fail.length) banner('bad',`${n} TERSIMPAN, ${fail.length} GAGAL`,fail.join(' | ')); else banner('ok',`${n} RESI JADI BARANG KELUAR`,'Stok sudah berkurang'); renderView(); });
 A['out-del']=d=>{ outSync(); G.ui.outD.lines.splice(+d.i,1); renderView(); };
 A['out-reset']=()=>{ G.ui.outD=newOut(); renderView(); };
 A['out-save']=(d,e,btn)=>busy(btn,async()=>{ outSync(); const x=G.ui.outD; if(NEED_NOTE.includes(x.purpose)&&!x.note.trim()) throw new Error('Keterangan wajib untuk '+PURPOSE[x.purpose]);
