@@ -468,7 +468,7 @@ function render(){
   const items=MENU.filter(menuOk);
   $('#app').innerHTML=`<header class="top"><div class="top-in gutter">${BRAND('Stok, ED & stock opname · '+esc(G.settings?.company_name||'4 Keledai'))}
    <div class="top-who"><div class="nm"><b>${esc(G.profile.full_name||showId(G.profile.email))}</b>${ROLE_LABEL[role()]}</div><button class="btn sm" data-act="go" data-v="akun">Akun saya</button><button class="btn sm" data-act="logout">Keluar</button></div></div></header>
-   <div class="shell"><nav class="menu gutter" aria-label="Menu utama">${items.map(([id,l])=>`<button data-act="go" data-v="${id}" aria-current="${G.view===id}">${l}</button>`).join('')}<div class="menu-foot"><div class="who small muted">Masuk sebagai ${esc(G.profile.full_name||showId(G.profile.email))}</div><button class="btn ghost small" data-act="logout">Keluar</button></div></nav>
+   <div class="shell"><nav class="menu gutter" aria-label="Menu utama">${items.map(([id,l])=>`<button data-act="go" data-v="${id}" aria-current="${G.view===id}">${l}</button>`).join('')}${is('owner','sales')?'<button data-act="crm" title="Sebaran area pengiriman (halaman terpisah)">CRM Area ↗</button>':''}<div class="menu-foot"><div class="who small muted">Masuk sebagai ${esc(G.profile.full_name||showId(G.profile.email))}</div><button class="btn ghost small" data-act="logout">Keluar</button></div></nav>
    <main class="gutter" id="view"><div class="empty">Memuat…</div></main></div>`;
   renderView(); }
 async function renderView(){ const v=G.view; const el=$('#view'); if(!el) return;
@@ -1052,6 +1052,7 @@ A.logout=async()=>{ await sb.auth.signOut(); G.ui={}; location.reload(); };
 A['cfg-save']=()=>{ const url=$('#cf-url').value.trim(), key=$('#cf-key').value.trim(); if(!/^https:\/\/.+/.test(url)||key.length<20) return banner('bad','ISIAN BELUM LENGKAP','Isi Project URL & anon key'); localStorage.setItem('k4_cfg',JSON.stringify({url,key})); location.reload(); };
 A.authtab=d=>{ G.ui.authTab=d.t; renderAuth(); };
 A.go=d=>{ G.view=d.v; G.ui.soDetail=null; render(); try{scrollTo(0,0)}catch(e){} };
+A.crm=()=>{ try{ const w=window.open('./crm.html','_blank','noopener'); if(!w) location.href='./crm.html'; }catch(e){ location.href='./crm.html'; } };
 A.more=d=>{ G.ui[d.k]=(G.ui[d.k]||1)+1; renderView(); };
 A.scan=d=>{ inSync(); outSync(); bdSync(); openScanner('Scan barang',p=>{ G.ui[d.target]=p.sku+' — '+p.name; banner('ok','DIKENALI',p.name); renderView().then(()=>{ const n=d.target==='in-sku'?(p.track_ed?'#in-ed':'#in-qty'):d.target==='bd-sku'?'#bd-qty':'#out-qty'; $(n)?.focus(); }); },false,d.target==='out-sku'); };
 A['scan-stok']=()=>openScanner('Cari produk',p=>{ G.ui.sq=p.sku; renderView(); });
