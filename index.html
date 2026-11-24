@@ -126,6 +126,9 @@ td.n,th.n{text-align:right}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
 .stat b{display:block;font-family:var(--fd);font-size:1.5rem;font-weight:800;line-height:1.15;color:var(--brand)}
 .stat span{color:var(--ink);font-weight:700;font-size:.82rem}
+.hppbox{display:inline-flex;flex-direction:column;align-items:flex-end;gap:1px;background:var(--tint);border:1.5px solid var(--brand);border-radius:14px;padding:9px 16px;box-shadow:0 1px 8px rgba(0,0,0,.12)}
+.hppbox small{font-size:.72rem;font-weight:700;color:var(--ink-2);letter-spacing:.2px;white-space:nowrap}
+.hppbox b{font-family:var(--fd);font-size:1.45rem;font-weight:800;color:var(--brand);line-height:1.12;white-space:nowrap}
 
 /* Scan */
 .scanfab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:1.05rem;padding:14px 22px;border-radius:99px}
@@ -804,7 +807,9 @@ function outSync(){ const d=G.ui.outD; if(!d||!$('#out-purpose')||$('#out-purpos
 V.stok=async()=>{ const [rows,lots]=await Promise.all([sel('v_stock',x=>x.eq('active',true).order('sku')),sel('v_lots',x=>x.order('ed'))]);
   const f=(G.ui.sq||'').toLowerCase(), br=G.ui.sb||'';
   const list=rows.filter(r=>(!br||r.brand_code===br)&&(!f||(r.sku+' '+r.name).toLowerCase().includes(f)));
-  return `<div class="row between"><h1>Stok & ED</h1>${seeCost()?`<span class="muted">Nilai stok ${rp(rows.reduce((a,r)=>a+num(r.value),0))}</span>`:`<span class="muted">${q(rows.reduce((a,r)=>a+num(r.qty),0))} pcs</span>`}</div>
+  const brandName=br?(G.brands.find(b=>b.code===br)?.name||br):'Semua brand';
+  const hppLbl='Nilai HPP · '+brandName+(f?' (hasil cari)':'');
+  return `<div class="row between"><h1>Stok & ED</h1>${seeCost()?`<div class="hppbox"><small>${esc(hppLbl)}</small><b>${rp(list.reduce((a,r)=>a+num(r.value),0))}</b></div>`:`<div class="hppbox"><small>${esc(brandName)}</small><b>${q(list.reduce((a,r)=>a+num(r.qty),0))} pcs</b></div>`}</div>
   <div class="grid"><div class="skuin"><label class="field"><span>Cari</span><input id="stok-q" value="${esc(G.ui.sq||'')}" placeholder="nama atau SKU"></label></div>
   <label class="field"><span>Brand</span><select id="stok-brand"><option value="">Semua</option>${G.brands.map(b=>`<option value="${b.code}" ${br===b.code?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div>
   <section class="panel"><div class="tbl"><table><thead><tr><th>Produk</th><th class="n">Stok</th><th class="n">Bisa dijual</th><th>Rincian per ED</th>${seeCost()?'<th class="n">Nilai HPP</th>':''}</tr></thead><tbody>
