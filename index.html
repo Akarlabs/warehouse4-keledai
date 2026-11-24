@@ -694,8 +694,21 @@ const findCode=c=>{ const u=String(c||'').toUpperCase(); if(!u) return null; con
 function matchByName(txt){ const t=normTxt(txt); let best=null;
   G.products.filter(p=>p.active).forEach(p=>{ const nn=normTxt(p.name); if(nn.length>=8&&t.includes(nn)&&(!best||nn.length>normTxt(best.name).length)) best=p; });
   return best?{sku:best.sku}:null; }
+/* ---- Baca area tujuan dari teks resi (untuk CRM). Best-effort: provinsi dari daftar baku, kota dari pola KAB/KOTA atau segmen setelah provinsi ---- */
+const PROV_CANON={'DKI JAKARTA':'DKI Jakarta','JAKARTA':'DKI Jakarta','DAERAH ISTIMEWA YOGYAKARTA':'DI Yogyakarta','DI YOGYAKARTA':'DI Yogyakarta','YOGYAKARTA':'DI Yogyakarta','KEPULAUAN BANGKA BELITUNG':'Kepulauan Bangka Belitung','BANGKA BELITUNG':'Kepulauan Bangka Belitung','KEPULAUAN RIAU':'Kepulauan Riau'};
+const PROV_LIST=['ACEH','SUMATERA UTARA','SUMATERA BARAT','SUMATERA SELATAN','RIAU','KEPULAUAN RIAU','JAMBI','KEPULAUAN BANGKA BELITUNG','BANGKA BELITUNG','BENGKULU','LAMPUNG','DKI JAKARTA','JAKARTA','JAWA BARAT','BANTEN','JAWA TENGAH','DAERAH ISTIMEWA YOGYAKARTA','DI YOGYAKARTA','YOGYAKARTA','JAWA TIMUR','BALI','NUSA TENGGARA BARAT','NUSA TENGGARA TIMUR','KALIMANTAN BARAT','KALIMANTAN TENGAH','KALIMANTAN SELATAN','KALIMANTAN TIMUR','KALIMANTAN UTARA','SULAWESI UTARA','GORONTALO','SULAWESI TENGAH','SULAWESI BARAT','SULAWESI SELATAN','SULAWESI TENGGARA','MALUKU UTARA','MALUKU','PAPUA BARAT DAYA','PAPUA BARAT','PAPUA SELATAN','PAPUA TENGAH','PAPUA PEGUNUNGAN','PAPUA'].sort((a,b)=>b.length-a.length);
+const titleID=s=>String(s||'').toLowerCase().replace(/\b([a-z])/g,c=>c.toUpperCase()).trim();
+function parseArea(T){ const raw=String(T||'').toUpperCase();
+  const U=' '+raw.replace(/[^A-Z., ]+/g,' ').replace(/\s+/g,' ')+' ';
+  let province=''; for(const p of PROV_LIST){ if(U.indexOf(' '+p+' ')>=0||U.indexOf(' '+p+',')>=0){ province=PROV_CANON[p]||titleID(p); break; } }
+  let city=''; const cs=[...raw.matchAll(/\b(KOTA|KABUPATEN|KAB)\b\.?\s+([A-Z]{3,})/g)].map(m=>({pre:m[1],nm:m[2]})).filter(c=>!PROV_LIST.includes(c.nm));
+  if(cs.length){ const cnt={}; cs.forEach(c=>{ cnt[c.nm]=cnt[c.nm]||{n:0,pre:c.pre}; cnt[c.nm].n++; }); const best=Object.keys(cnt).sort((a,b)=>cnt[b].n-cnt[a].n||b.length-a.length)[0]; city=(cnt[best].pre==='KOTA'?'Kota ':'Kab. ')+titleID(best); }
+  if(!city&&province){ const parts=raw.split(/[,\n]/).map(s=>s.replace(/[^A-Z ]+/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+    const pi=parts.findIndex(s=>s.includes(province.toUpperCase())); const nxt=pi>=0?parts[pi+1]:''; if(nxt&&nxt.length>=3&&nxt.length<=24&&!PROV_LIST.includes(nxt)) city=titleID(nxt); }
+  return {province,city}; }
 function parseResi(pg){
   const T=pg.text||'';
+  const area=parseArea(T);
   const m=T.match(/(?:no\.?\s*pesanan|nomor\s*pesanan|order\s*id|order\s*no\.?|no\.?\s*order|invoice)\s*[:#]?\s*([A-Z0-9][A-Z0-9\/-]{5,})/i);
   const ref=m?m[1].toUpperCase():'';
   const rn=T.match(/no\.?\s*resi\s*[:#]?\s*([A-Z0-9-]{6,})/i), bk=T.match(/batas\s*kirim\s*:?\s*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/i), pn=T.match(/penerima\s*:\s*(.+?)(?:\s+pengirim\b|$)/im);
@@ -706,7 +719,7 @@ function parseResi(pg){
   const rows=resiTable(pg.items||[]);
   // SKU ada tapi belum terdaftar → minta dipilih, jangan ditebak dari nama
   if(rows.length){ rows.forEach(r=>{ const hit=r.sku?findCode(r.sku):(findCode((r.var.match(/[A-Za-z0-9._-]{3,}/)||[''])[0])||matchByName(r.name+' '+r.var)); add(hit,r.qty,[r.sku,r.name.slice(0,60),r.var].filter(Boolean).join(' · ')); });
-    return {ref,platform,...meta,items,text:T,table:true}; }
+    return {ref,platform,...meta,province:area.province,city:area.city,items,text:T,table:true}; }
   // Tanpa tabel: cari kode SKU / nama di setiap baris teks
   const lines=T.split('\n');
   const qtyIn=l=>{ const r=l.match(/(?:qty|jumlah|jml|kuantitas)\s*[:x]?\s*(\d{1,4})/i)||l.match(/\bx\s*(\d{1,4})\b/i)||l.match(/\b(\d{1,4})\s*(?:pcs|x)\b/i); return r?+r[1]:0; };
@@ -717,7 +730,7 @@ function parseResi(pg){
     let li=lines.findIndex(l=>re.test(l.toUpperCase()));
     if(li<0){ const nn=normTxt(p.name); if(nn.length>=8){ li=lines.findIndex(l=>normTxt(l).includes(nn)); if(li<0){ li=lines.findIndex((l,i)=>normTxt(l+' '+(lines[i+1]||'')).includes(nn)); if(li>=0&&!normTxt(lines[li]).includes(nn.split(' ')[0])) li++; } } }
     if(li<0||(hit.has(li)&&!re.test(lines[li].toUpperCase()))) return; const qn=qtyIn(lines[li])||qtyIn(lines[li+1]||''); items.push({sku:p.sku,qty:qn||1,guess:!qn}); });
-  return {ref,platform,...meta,items,text:T}; }
+  return {ref,platform,...meta,province:area.province,city:area.city,items,text:T}; }
 /* perbarui tombol simpan & keterangannya tanpa menggambar ulang, supaya kursor tidak lompat saat mengetik */
 function resiBtnSync(){ const b=$('#resi-save-btn'), h=$('#resi-hint'); if(!b) return; const R=G.ui.resi||[];
   const noRef=R.filter(r=>!r.ref&&r.items.length&&!r.dup&&!r.saved&&!r.skip&&!r.cancelled).length;
@@ -737,7 +750,7 @@ const itemName=it=>{ const b=bund(it.sku); return b?b.name+' (bundling)':(prod(i
 const ordItems=o=>(o.items||[]).map(it=>`<div><b>${q(it.qty)}</b> × ${esc(itemName(it))}${it.sku?'':' <span class="badge b-warn">kode belum terdaftar</span>'}</div>`).join('');
 const ordToResi=o=>({ref:o.ref,platform:o.platform,resi_no:o.resi_no||'',customer:o.customer||'',deadline:o.deadline||'',text:'',file:'Antrean · '+ordWho(o),order:o,dup:false,
   items:(o.items||[]).map(it=>{ const ok=it.sku&&(bund(it.sku)?.active||prod(it.sku)?.active); return ok?{sku:it.sku,bundle:!!bund(it.sku),qty:num(it.qty)}:{sku:'',raw:it.raw||it.sku||'',qty:num(it.qty),unknown:true}; })});
-const resiRow=r=>({ref:r.ref,resi_no:r.resi_no||'',platform:r.platform,customer:r.customer||'',deadline:r.deadline||'',items:r.items.filter(it=>num(it.qty)>0).map(it=>({sku:it.sku||'',raw:it.raw||'',qty:num(it.qty)}))});
+const resiRow=r=>({ref:r.ref,resi_no:r.resi_no||'',platform:r.platform,customer:r.customer||'',province:r.province||'',city:r.city||'',deadline:r.deadline||'',items:r.items.filter(it=>num(it.qty)>0).map(it=>({sku:it.sku||'',raw:it.raw||'',qty:num(it.qty)}))});
 const OPEN_ORDERS=()=>sel('v_orders',x=>x.in('status',['baru','proses']).order('created_at').limit(500));
 /* Daftar ambil: semua resi siap digabung per kode barang; bundling dipecah jadi isinya */
 function pickData(R){ const comp={}, bund_={}; let n=0;
@@ -787,7 +800,8 @@ function resiPanel(lots){ const R=G.ui.resi||[]; const ready=R.filter(resiReady)
        <div class="pk-qty"><b>${q(c.qty)}</b><span>pcs</span></div></label>`; }).join('')}</div>
      <div class="row between small"><b>Total ${q(P.comp.reduce((a,c)=>a+c.qty,0))} pcs · ${P.comp.length} jenis barang</b><span>${checked}/${P.comp.length} sudah dicek</span></div>
      ${P.bund.length?`<b>Paket bundling (sudah termasuk di daftar atas)</b><div class="picks">${P.bund.map(b=>`<div class="pick"><div class="pk-info"><b>${esc(b.name)}</b><span class="small muted code">${esc(b.sku)} · ${b.orders} resi</span><span class="small">Isi per paket: ${b.items.map(i=>`${q(i.qty)} × ${esc(i.name)}`).join(', ')}</span><span class="small">Total isi: ${b.items.map(i=>`<b>${q(num(i.qty)*b.qty)}</b> × ${esc(i.name)}`).join(', ')}</span></div><div class="pk-qty"><b>${q(b.qty)}</b><span>paket</span></div></div>`).join('')}</div>`:''}</div>`:''}
-   ${R.length?`<details ${U.length||noRef||!P.comp.length?'open':''}><summary><b>Rincian per resi (${R.length})</b> <span class="small muted">— koreksi qty / platform / lewati resi di sini</span></summary><div class="tbl"><table><thead><tr><th>No. pesanan</th><th>Platform</th><th>Barang terbaca</th><th>Status</th></tr></thead><tbody>${R.map((r,i)=>`<tr><td><input data-rref="${i}" value="${esc(r.ref)}" placeholder="isi no. pesanan" style="min-height:38px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:4px 8px;width:100%;min-width:150px"><div class="small muted">${esc(r.file)}</div></td>
+   ${R.length?`<details ${U.length||noRef||!P.comp.length?'open':''}><summary><b>Rincian per resi (${R.length})</b> <span class="small muted">— koreksi qty / platform / lewati resi di sini</span></summary><div class="tbl"><table><thead><tr><th>No. pesanan</th><th>Platform</th><th>Barang terbaca</th><th>Status</th></tr></thead><tbody>${R.map((r,i)=>`<tr><td><input data-rref="${i}" value="${esc(r.ref)}" placeholder="isi no. pesanan" style="min-height:38px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:4px 8px;width:100%;min-width:150px"><div class="small muted">${esc(r.file)}</div>
+     <div class="row" style="gap:4px;margin-top:4px;flex-wrap:nowrap"><span class="small muted" style="font-size:.68rem;align-self:center">Area</span><input data-rcity="${i}" value="${esc(r.city||'')}" placeholder="Kota" title="Kota/Kabupaten tujuan (untuk CRM)" style="min-height:30px;font-size:.72rem;border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:2px 6px;width:50%;min-width:70px"><input data-rprov="${i}" value="${esc(r.province||'')}" placeholder="Provinsi" title="Provinsi tujuan (untuk CRM)" style="min-height:30px;font-size:.72rem;border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:2px 6px;width:50%;min-width:70px"></div></td>
      <td><select data-rplat="${i}" style="min-height:38px">${['shopee','tiktok','tokopedia','lazada','website','b2b','offline'].map(k=>`<option value="${k}" ${r.platform===k?'selected':''}>${PURPOSE[k]}</option>`).join('')}</select></td>
      <td class="small">${r.items.length?r.items.map((it,j)=>`<div class="row" style="gap:6px;flex-wrap:nowrap"><input type="number" min="0" data-rqty="${i}:${j}" value="${it.qty}" style="width:64px;min-height:34px;border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:2px 6px"> × ${it.sku?esc(bund(it.sku)?.name||prod(it.sku)?.name||it.sku):`<span><span class="badge b-warn">Belum terdaftar</span> <span class="code">${esc(it.raw||'')}</span><br><select data-rmap="${i}:${j}" style="min-height:34px;max-width:320px;margin-top:4px">${opts}</select></span>`}${it.bundle?' <span class="badge b-info">Bundling</span>':''}${it.guess?' <span class="badge b-warn">cek jumlah</span>':''}</div>`).join(''):'<span class="badge b-bad">Produk tidak dikenali</span><div class="muted">Input manual di bawah</div>'}
        <details><summary class="muted">Lihat teks resi</summary><div class="pre small" style="max-height:160px;overflow:auto">${esc(r.text)}</div></details></td>
@@ -1114,7 +1128,7 @@ A['resi-save']=()=>{ const R=G.ui.resi||[]; const P=pickData(R); if(!P.n||!P.com
    <div class="row"><button class="btn primary" data-act="resi-save-go">Ya, keluarkan &amp; potong stok</button><button class="btn ghost" data-act="sc-close">Batal, cek dulu</button></div></div></div>`; };
 A['resi-save-go']=(d,e,btn)=>busy(btn,async()=>{ const R=G.ui.resi||[]; let n=0, fail=[];
   for(const r of R){ if(!resiReady(r)) continue; const lines=r.items.filter(it=>it.qty>0).map(it=>({sku:it.sku,qty:it.qty})); if(!lines.length) continue;
-    try{ const x=await rpc('create_outbound',{p:{purpose:r.platform,doc_date:today(),ref:r.ref,resi_no:r.resi_no||'',deadline:r.deadline||'',customer:r.customer||'',note:'Dari PDF resi',lines}}); r.saved=x.doc_no; n++; }catch(err){ fail.push((r.ref||r.file)+': '+errMsg(err)); } }
+    try{ const x=await rpc('create_outbound',{p:{purpose:r.platform,doc_date:today(),ref:r.ref,resi_no:r.resi_no||'',deadline:r.deadline||'',customer:r.customer||'',province:r.province||'',city:r.city||'',note:'Dari PDF resi',lines}}); r.saved=x.doc_no; n++; }catch(err){ fail.push((r.ref||r.file)+': '+errMsg(err)); } }
   closeScanner();
   if(fail.length) banner('bad',`${n} TERSIMPAN, ${fail.length} GAGAL`,fail.join(' | ')); else banner('ok',`${n} RESI JADI BARANG KELUAR`,'Stok sudah berkurang'); renderView(); });
 A['out-del']=d=>{ outSync(); G.ui.outD.lines.splice(+d.i,1); renderView(); };
@@ -1341,6 +1355,8 @@ function liveSync(t){ const id=t.id; if(!id) return;
   if(['in-qty','in-ed','in-batch','out-qty','in-sku','out-sku','bd-sku','bd-qty'].includes(id)) G.ui[id]=t.value; }
 document.addEventListener('input',e=>{ const t=e.target; liveSync(t);
   if(t.dataset.rref!==undefined){ G.ui.resi[+t.dataset.rref].ref=t.value.trim().toUpperCase(); resiBtnSync(); }
+  if(t.dataset.rprov!==undefined){ G.ui.resi[+t.dataset.rprov].province=t.value.trim(); }
+  if(t.dataset.rcity!==undefined){ G.ui.resi[+t.dataset.rcity].city=t.value.trim(); }
   if(t.dataset.sref!==undefined){ G.ui.sres[+t.dataset.sref].ref=t.value.trim().toUpperCase(); clearTimeout(G.ui.srT); G.ui.srT=setTimeout(()=>renderView(),600); }
   if(t.id==='tap-q'){ G.ui.tapQ=t.value; clearTimeout(G.ui.tapQT); G.ui.tapQT=setTimeout(()=>renderView(),350); }
   if(t.id==='home-q'){ const w=t.value.toLowerCase().trim().split(/\s+/).filter(Boolean); document.querySelectorAll('tr[data-f],.pcard[data-f]').forEach(r=>{ r.hidden=!w.every(x=>r.dataset.f.includes(x)); }); }

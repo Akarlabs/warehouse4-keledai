@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM Area · Warehouse 4 Keledai</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --paper:#f4f4f4; --surface:#ffffff; --ink:#323d3c; --ink-2:#5c6968; --line:#dcdce4; --line-strong:#7d8a88;
+  --brand:#427a55; --brand-deep:#2f5a3e; --on-brand:#ffffff; --tint:#e3eee7;
+  --royal:#044cac; --bad:#B83227; --warn:#9A6400;
+  --f:"Figtree","Segoe UI",system-ui,sans-serif; --fd:"Montserrat","Segoe UI",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0e1f17; --surface:#152a20; --ink:#eef3f0; --ink-2:#a9b8b1; --line:#2b4337; --line-strong:#6f877b;
+  --brand:#7cc495; --brand-deep:#a5d9b8; --on-brand:#0e1f17; --tint:#1b3a2a;
+  --royal:#7fa8f0; --bad:#F07F72; --warn:#F0B85A; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.45}
+.wrap{max-width:1040px;margin:0 auto;padding:20px 16px 64px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+h1{font-family:var(--fd);font-weight:800;font-size:1.5rem;margin:0;color:var(--brand)}
+h2{font-family:var(--fd);font-weight:700;font-size:1.05rem;margin:0 0 10px}
+.sub{color:var(--ink-2);font-size:.86rem;margin:2px 0 18px}
+a.back{color:var(--brand);font-weight:600;text-decoration:none;font-size:.9rem;border:1px solid var(--line-strong);padding:7px 14px;border-radius:10px}
+a.back:hover{border-color:var(--brand)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.field{display:flex;flex-direction:column;gap:4px}
+.field span{font-size:.74rem;font-weight:600;color:var(--ink-2)}
+.field input,.field select{min-height:40px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:9px;padding:6px 10px;font:inherit}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.stat.hl{border:1.5px solid var(--brand);background:var(--tint)}
+.stat .l{font-size:.74rem;color:var(--ink-2);font-weight:600}
+.stat .v{font-family:var(--fd);font-weight:800;font-size:1.5rem;color:var(--brand);line-height:1.2;margin-top:3px}
+.stat .v.sm{font-size:1.15rem}
+.bars{display:flex;flex-direction:column;gap:9px}
+.bar{display:grid;grid-template-columns:150px 1fr auto;gap:10px;align-items:center;font-size:.9rem}
+.bar .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{background:var(--tint);border-radius:7px;height:22px;overflow:hidden}
+.bar .fill{background:var(--brand);height:100%;border-radius:7px;min-width:3px}
+.bar .n{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink-2);white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th{text-align:left;font-family:var(--fd);font-weight:700;font-size:.78rem;color:var(--on-brand);background:var(--brand);padding:10px 12px}
+td{padding:9px 12px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:none}
+.n{text-align:right;font-variant-numeric:tabular-nums}
+.btn{font:inherit;font-weight:700;border:1px solid var(--brand);background:var(--brand);color:var(--on-brand);border-radius:10px;padding:9px 16px;cursor:pointer;min-height:42px}
+.btn.ghost{background:transparent;color:var(--brand)}
+.muted{color:var(--ink-2)}
+.pill{display:inline-block;background:var(--tint);color:var(--brand-deep);font-weight:600;font-size:.74rem;padding:2px 9px;border-radius:999px}
+.empty{text-align:center;color:var(--ink-2);padding:30px 10px}
+.login{max-width:360px;margin:8vh auto;text-align:center}
+.login .field{text-align:left;margin-bottom:12px}
+.err{color:var(--bad);font-size:.85rem;margin-top:8px;min-height:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:720px){.grid2{grid-template-columns:1fr}.bar{grid-template-columns:110px 1fr auto}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">Memuat…</div></div>
+
+<script src="./config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script>
+const ID_DOMAIN='4keledai.id';
+const cfg=window.APP_CONFIG||{};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const PLAT={shopee:'Shopee',tiktok:'TikTok',tokopedia:'Tokopedia',lazada:'Lazada',website:'Website',b2b:'B2B',offline:'Offline'};
+let sb=null, rows=[], UI={plat:'',from:'',to:'',q:''};
+
+function boot(){
+  const url=(cfg.supabaseUrl||'').trim(), key=(cfg.supabaseAnonKey||'').trim();
+  if(!url||!key){ $('#app').innerHTML='<div class="panel"><b>config.js belum terisi.</b><p class="muted">Isi Project URL & anon key Supabase di file config.js.</p></div>'; return; }
+  if(!window.supabase){ $('#app').innerHTML='<div class="panel">Library Supabase gagal dimuat. Cek internet lalu muat ulang.</div>'; return; }
+  sb=supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true}});
+  sb.auth.getSession().then(({data})=>{ if(data.session) load(); else renderLogin(); });
+}
+
+function renderLogin(msg){
+  $('#app').innerHTML=`<div class="login">
+    <h1>CRM Area</h1><p class="sub">Masuk dengan akun Warehouse 4 Keledai</p>
+    <div class="panel"><form id="lf">
+      <label class="field"><span>ID</span><input id="lid" autocomplete="username" placeholder="mis. ennosamodro"></label>
+      <label class="field"><span>Password</span><input id="lpw" type="password" autocomplete="current-password"></label>
+      <button class="btn" style="width:100%">Masuk</button>
+      <div class="err" id="lerr">${esc(msg||'')}</div>
+    </form></div>
+    <a class="back" href="./index.html">← Buka aplikasi utama</a>
+  </div>`;
+  $('#lf').addEventListener('submit',async e=>{ e.preventDefault(); const b=$('#lf button'); b.disabled=true;
+    const id=$('#lid').value.trim().toLowerCase(), pw=$('#lpw').value;
+    const email=/@/.test(id)?id:id+'@'+ID_DOMAIN;
+    const {error}=await sb.auth.signInWithPassword({email,password:pw});
+    b.disabled=false; if(error){ $('#lerr').textContent='ID atau password salah.'; return; } load(); });
+}
+
+async function load(){
+  $('#app').innerHTML='<div class="empty">Memuat data pengiriman…</div>';
+  let all=[], from=0; const N=1000;
+  try{
+    for(;;){ const {data,error}=await sb.from('v_crm').select('*').order('created_at',{ascending:false}).range(from,from+N-1);
+      if(error) throw error; all=all.concat(data||[]); if(!data||data.length<N) break; from+=N; }
+  }catch(e){ if(/jwt|auth|session/i.test(e.message||'')){ renderLogin('Sesi berakhir, masuk lagi.'); return; }
+    $('#app').innerHTML='<div class="panel">Gagal memuat data: '+esc(e.message||e)+'</div>'; return; }
+  rows=all; render();
+}
+
+function filtered(){
+  return rows.filter(r=>{
+    if(UI.plat&&r.platform!==UI.plat) return false;
+    const d=(r.created_at||'').slice(0,10);
+    if(UI.from&&d<UI.from) return false;
+    if(UI.to&&d>UI.to) return false;
+    if(UI.q){ const q=UI.q.toLowerCase(); if(!((r.province||'')+' '+(r.city||'')).toLowerCase().includes(q)) return false; }
+    return true;
+  });
+}
+
+function tally(list,key){ const m={}; list.forEach(r=>{ const k=(r[key]||'').trim()||'(Tidak terbaca)'; m[k]=(m[k]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+
+function barList(entries,total,limit){
+  const top=entries.slice(0,limit||8); const max=top.length?top[0][1]:1;
+  return `<div class="bars">${top.map(([n,c])=>`<div class="bar"><span class="nm" title="${esc(n)}">${esc(n)}</span><div class="track"><div class="fill" style="width:${Math.max(3,c/max*100)}%"></div></div><span class="n">${c} · ${total?Math.round(c/total*100):0}%</span></div>`).join('')||'<div class="empty">Belum ada data.</div>'}</div>`;
+}
+
+function render(){
+  const list=filtered();
+  const prov=tally(list,'province'), city=tally(list,'city');
+  const withArea=list.filter(r=>(r.province||'').trim()).length;
+  const topProv=prov.find(p=>p[0]!=='(Tidak terbaca)'), topCity=city.find(c=>c[0]!=='(Tidak terbaca)');
+  const plats=[...new Set(rows.map(r=>r.platform))];
+  $('#app').innerHTML=`
+  <header>
+    <div><h1>CRM · Sebaran Pengiriman</h1></div>
+    <div style="display:flex;gap:8px"><button class="btn ghost" id="csv">Unduh CSV</button><a class="back" href="./index.html">← Aplikasi</a></div>
+  </header>
+  <p class="sub">Dari setiap resi yang diinput, provinsi & kota tujuan dicatat otomatis. Data mulai terisi dari resi yang diinput sejak fitur ini aktif.</p>
+
+  <div class="panel"><div class="filters">
+    <label class="field"><span>Platform</span><select id="f-plat"><option value="">Semua</option>${plats.filter(Boolean).map(p=>`<option value="${p}" ${UI.plat===p?'selected':''}>${PLAT[p]||p}</option>`).join('')}</select></label>
+    <label class="field"><span>Dari tanggal</span><input type="date" id="f-from" value="${UI.from}"></label>
+    <label class="field"><span>Sampai</span><input type="date" id="f-to" value="${UI.to}"></label>
+    <label class="field" style="flex:1;min-width:140px"><span>Cari area</span><input id="f-q" value="${esc(UI.q)}" placeholder="nama provinsi / kota"></label>
+  </div></div>
+
+  <div class="stats">
+    <div class="stat hl"><div class="l">Total pengiriman</div><div class="v">${list.length}</div></div>
+    <div class="stat"><div class="l">Provinsi terbanyak</div><div class="v sm">${topProv?esc(topProv[0]):'–'}</div><div class="muted" style="font-size:.76rem">${topProv?topProv[1]+' kiriman':''}</div></div>
+    <div class="stat"><div class="l">Kota terbanyak</div><div class="v sm">${topCity?esc(topCity[0]):'–'}</div><div class="muted" style="font-size:.76rem">${topCity?topCity[1]+' kiriman':''}</div></div>
+    <div class="stat"><div class="l">Area terbaca</div><div class="v sm">${list.length?Math.round(withArea/list.length*100):0}%</div><div class="muted" style="font-size:.76rem">${withArea} dari ${list.length}</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel"><h2>Top Provinsi</h2>${barList(prov,list.length,8)}</div>
+    <div class="panel"><h2>Top Kota / Kabupaten</h2>${barList(city,list.length,8)}</div>
+  </div>
+
+  <div class="panel"><h2>Semua provinsi (${prov.length})</h2>
+    <table><thead><tr><th>Provinsi</th><th class="n">Kiriman</th><th class="n">%</th></tr></thead>
+    <tbody>${prov.map(([n,c])=>`<tr><td>${esc(n)}</td><td class="n">${c}</td><td class="n">${list.length?Math.round(c/list.length*100):0}%</td></tr>`).join('')||'<tr><td colspan="3" class="empty">Belum ada data pengiriman dengan area.</td></tr>'}</tbody></table>
+  </div>
+
+  <div class="panel"><h2>Semua kota / kabupaten (${city.length})</h2>
+    <table><thead><tr><th>Kota / Kabupaten</th><th class="n">Kiriman</th><th class="n">%</th></tr></thead>
+    <tbody>${city.map(([n,c])=>`<tr><td>${esc(n)}</td><td class="n">${c}</td><td class="n">${list.length?Math.round(c/list.length*100):0}%</td></tr>`).join('')||'<tr><td colspan="3" class="empty">Belum ada data.</td></tr>'}</tbody></table>
+  </div>`;
+
+  const deb=(fn)=>{ let t; return e=>{ clearTimeout(t); t=setTimeout(()=>fn(e),300); }; };
+  $('#f-plat').addEventListener('change',e=>{ UI.plat=e.target.value; render(); });
+  $('#f-from').addEventListener('change',e=>{ UI.from=e.target.value; render(); });
+  $('#f-to').addEventListener('change',e=>{ UI.to=e.target.value; render(); });
+  $('#f-q').addEventListener('input',deb(e=>{ UI.q=e.target.value; render(); }));
+  $('#csv').addEventListener('click',exportCsv);
+}
+
+function exportCsv(){
+  const list=filtered();
+  const head=['no_pesanan','platform','provinsi','kota','pembeli','tanggal','qty'];
+  const esc2=v=>{ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[head.join(',')].concat(list.map(r=>[r.ref,r.platform,r.province||'',r.city||'',r.customer||'',(r.created_at||'').slice(0,10),r.total_qty].map(esc2).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='crm-area-4keledai-'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+boot();
+</script>
+</body>
+</html>

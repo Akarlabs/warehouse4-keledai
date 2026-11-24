@@ -205,6 +205,8 @@ create table public.orders (
   resi_no       text,
   platform      text not null check (platform in ('shopee','tiktok','tokopedia','lazada','website','b2b','offline')),
   customer      text,
+  province      text,                            -- provinsi tujuan (CRM, dibaca dari resi)
+  city          text,                            -- kota/kabupaten tujuan (CRM, dibaca dari resi)
   deadline      date,                            -- batas kirim
   items         jsonb not null default '[]',     -- [{sku, raw, qty}] sku boleh kosong kalau kode belum terdaftar
   status        text not null default 'baru' check (status in ('baru','proses','selesai','batal')),
@@ -704,13 +706,14 @@ begin
 
   -- Tracker pesanan: tandai selesai (atau catat baru kalau belum pernah diinput)
   if v_sale and v_ref is not null and (o.id is not null or v_purpose in ('shopee','tiktok','tokopedia','lazada')) then
-    insert into public.orders (ref, resi_no, platform, customer, deadline, items, status, created_by, created_name, created_role,
+    insert into public.orders (ref, resi_no, platform, customer, province, city, deadline, items, status, created_by, created_name, created_role,
                                picked_name, picked_at, done_name, done_at, out_doc_no)
-    values (v_ref, nullif(trim(p->>'resi_no'),''), v_purpose, nullif(trim(p->>'customer'),''), nullif(p->>'deadline','')::date, p->'lines', 'selesai',
+    values (v_ref, nullif(trim(p->>'resi_no'),''), v_purpose, nullif(trim(p->>'customer'),''), nullif(trim(p->>'province'),''), nullif(trim(p->>'city'),''), nullif(p->>'deadline','')::date, p->'lines', 'selesai',
             auth.uid(), public._me_name(), public.my_role(), public._me_name(), now(), public._me_name(), now(), v_no)
     on conflict (ref) do update set status = 'selesai', items = excluded.items, done_name = excluded.done_name, done_at = now(),
         out_doc_no = excluded.out_doc_no, picked_name = coalesce(public.orders.picked_name, excluded.picked_name),
-        picked_at = coalesce(public.orders.picked_at, now()), resi_no = coalesce(public.orders.resi_no, excluded.resi_no);
+        picked_at = coalesce(public.orders.picked_at, now()), resi_no = coalesce(public.orders.resi_no, excluded.resi_no),
+        province = coalesce(public.orders.province, excluded.province), city = coalesce(public.orders.city, excluded.city);
   end if;
   return jsonb_build_object('doc_no', v_no, 'status', case when v_need_approval then 'pending' else 'posted' end);
 end $$;
@@ -1010,6 +1013,14 @@ create view public.v_orders with (security_barrier) as
     from public.orders o
    where public.is_active();
 
+-- CRM: sebaran area pengiriman. Satu baris per pesanan yang sudah/ sedang dikirim,
+-- dengan provinsi & kota tujuan yang dibaca dari resi. Hanya pengguna aktif.
+create view public.v_crm with (security_barrier) as
+  select o.ref, o.platform, o.customer, o.province, o.city, o.status, o.created_at,
+         (select coalesce(sum((x->>'qty')::numeric), 0) from jsonb_array_elements(o.items) x) as total_qty
+    from public.orders o
+   where public.is_active() and o.status <> 'batal';
+
 create view public.v_opnames with (security_barrier) as
   select o.id, o.doc_no, o.period, o.status, o.note, o.created_name, o.created_at, o.submitted_name, o.submitted_at,
          o.approved_name, o.approved_at,
@@ -1185,8 +1196,9 @@ begin
       continue;
     end if;
     if jsonb_typeof(r->'items') <> 'array' or jsonb_array_length(r->'items') = 0 then raise exception 'Pesanan %: tidak ada barang', v_ref; end if;
-    insert into public.orders (ref, resi_no, platform, customer, deadline, items, status, created_by, created_name, created_role, picked_name, picked_at)
+    insert into public.orders (ref, resi_no, platform, customer, province, city, deadline, items, status, created_by, created_name, created_role, picked_name, picked_at)
     values (v_ref, nullif(trim(r->>'resi_no'),''), coalesce(nullif(r->>'platform',''),'shopee'), nullif(trim(r->>'customer'),''),
+            nullif(trim(r->>'province'),''), nullif(trim(r->>'city'),''),
             nullif(r->>'deadline','')::date, r->'items', case when v_start then 'proses' else 'baru' end,
             auth.uid(), public._me_name(), public.my_role(),
             case when v_start then public._me_name() end, case when v_start then now() end);
@@ -1262,7 +1274,8 @@ alter default privileges in schema public revoke execute on functions from publi
 grant usage on schema public to authenticated;
 grant select on public.v_settings, public.v_brands, public.v_suppliers, public.v_products, public.v_lots, public.v_stock,
                 public.v_moves, public.v_inbounds, public.v_inbound_lines, public.v_outbounds, public.v_outbound_lines,
-                public.v_opnames, public.v_opname_lines, public.v_product_photos, public.v_bundles, public.v_orders
+                public.v_opnames, public.v_opname_lines, public.v_product_photos, public.v_bundles, public.v_orders,
+                public.v_crm
    to authenticated;
 
 grant execute on function
