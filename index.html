@@ -140,6 +140,9 @@ td.n,th.n{text-align:right}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px dashed var(--ink-2);background:var(--paper);border-radius:8px;padding:6px 9px;cursor:pointer;font-size:.8rem;text-align:left}
 .chip b{display:block;font-stretch:80%}
+.stokchip{border-style:solid;border-color:var(--line-strong);border-radius:99px;padding:8px 13px;min-height:40px;color:inherit}.stokchip b{display:inline;margin-left:3px}
+.stokchip[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.thsort{font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;background:none;border:0;padding:4px 0;cursor:pointer;white-space:nowrap}.thsort:hover{color:var(--ink)}.thsort i{font-style:normal;opacity:.75}
 .chip.loc{border-style:solid;border-color:var(--azure)}
 
 /* Banner hasil scan: elemen yang paling penting untuk staf */
@@ -818,16 +821,35 @@ function prodIcon(p){ const n=(p.name+' '+(p.sku||'')).toLowerCase(); const c='f
 function outSync(){ const d=G.ui.outD; if(!d||!$('#out-purpose')||$('#out-purpose').dataset.gen!==String(d.gen)) return; d.purpose=$('#out-purpose').value; d.doc_date=$('#out-date').value; d.ref=$('#out-ref').value; d.customer=$('#out-cust').value; d.note=$('#out-note').value; G.ui['out-qty']=$('#out-qty')?.value||''; }
 
 /* ---------------- STOK ---------------- */
-V.stok=async()=>{ const [rows,lots]=await Promise.all([sel('v_stock',x=>x.eq('active',true).order('sku')),sel('v_lots',x=>x.order('ed'))]);
-  const f=(G.ui.sq||'').toLowerCase(), br=G.ui.sb||'';
-  const list=rows.filter(r=>(!br||r.brand_code===br)&&(!f||(r.sku+' '+r.name).toLowerCase().includes(f)));
+/* Urutan: kunci kolom → nilai pembanding (null selalu di bawah). Arah pertama saat kepala kolom diklik ada di STOK_DIR. */
+const STOK_VAL={name:r=>r.name.toLowerCase(),qty:r=>num(r.qty),sell:r=>num(r.sellable),ed:r=>r.nearest_ed||null,value:r=>num(r.value),
+  kurang:r=>num(r.min_stock)>0?num(r.min_stock)-num(r.qty):null};
+const STOK_DIR={name:'asc',qty:'asc',sell:'asc',ed:'asc',value:'desc',kurang:'desc'};
+const STOK_SORTS=[['','Kode SKU (bawaan)'],['qty:asc','Stok terendah'],['qty:desc','Stok tertinggi'],['sell:asc','Bisa dijual terendah'],['sell:desc','Bisa dijual tertinggi'],['ed:asc','ED paling dekat'],['ed:desc','ED paling jauh'],['kurang:desc','Paling kurang dari minimum'],['value:desc','Nilai HPP tertinggi'],['value:asc','Nilai HPP terendah'],['name:asc','Nama A–Z'],['name:desc','Nama Z–A']];
+const STOK_FILTERS=[['','Semua',()=>true],['low','Di bawah minimum',r=>r.below_min],['habis','Stok habis',r=>num(r.qty)<=0],['ada','Ada stok',r=>num(r.qty)>0],
+  ['dekat','ED dekat',(r,ls)=>ls.some(l=>l.ed_status==='dekat')],['exp','Kedaluwarsa',r=>num(r.expired_qty)>0],['nohpp','HPP belum diisi',r=>num(r.qty)>0&&!num(r.value)]];
+function stokSort(list,s){ const [k,dir]=(s||'').split(':'), val=STOK_VAL[k]; if(!val) return list; const m=dir==='desc'?-1:1;
+  return [...list].sort((a,b)=>{ const x=val(a),y=val(b); if(x===null||y===null) return x===y?0:(x===null?1:-1); return (x<y?-1:x>y?1:0)*m; }); }
+V.stok=async()=>{ const keep=G.ui.stokKeep&&G.cache.stok; G.ui.stokKeep=false;
+  const [rows,lots]=keep||await Promise.all([sel('v_stock',x=>x.eq('active',true).order('sku')),sel('v_lots',x=>x.order('ed'))]); G.cache.stok=[rows,lots];
+  const f=(G.ui.sq||'').toLowerCase(), br=G.ui.sb||'', edN=num(G.ui.sEd), sort=G.ui.sSort||'';
+  const bySku={}; lots.forEach(l=>(bySku[l.sku]=bySku[l.sku]||[]).push(l)); const lotsOf=r=>bySku[r.sku]||[];
+  const base=rows.filter(r=>(!br||r.brand_code===br)&&(!f||(r.sku+' '+r.name).toLowerCase().includes(f))&&(!edN||lotsOf(r).some(l=>l.ed&&num(l.days_left)>=0&&num(l.days_left)<=edN)));
+  const filters=STOK_FILTERS.filter(x=>x[0]!=='nohpp'||seeCost()), cur=filters.find(x=>x[0]===(G.ui.sF||''))||filters[0];
+  const list=stokSort(base.filter(r=>cur[2](r,lotsOf(r))),sort);
+  const anyF=!!(f||br||edN||cur[0]||sort);
+  const [sk,sd]=sort.split(':');
+  const th=(k,label,n)=>`<th${n?' class="n"':''} aria-sort="${sk===k?(sd==='desc'?'descending':'ascending'):'none'}"><button type="button" class="thsort" id="sth-${k}" data-act="stok-sort" data-k="${k}" title="Klik untuk mengurutkan">${label} <i aria-hidden="true">${sk===k?(sd==='desc'?'▼':'▲'):'↕'}</i></button></th>`;
   const brandName=br?(G.brands.find(b=>b.code===br)?.name||br):'Semua brand';
-  const hppLbl='Nilai HPP · '+brandName+(f?' (hasil cari)':'');
+  const hppLbl='Nilai HPP · '+brandName+(f||edN||cur[0]?' (hasil filter)':'');
   return `<div class="row between"><h1>Stok & ED</h1>${seeCost()?`<div class="hppbox"><small>${esc(hppLbl)}</small><b>${rp(list.reduce((a,r)=>a+num(r.value),0))}</b></div>`:`<div class="hppbox"><small>${esc(brandName)}</small><b>${q(list.reduce((a,r)=>a+num(r.qty),0))} pcs</b></div>`}</div>
   <div class="grid"><div class="skuin"><label class="field"><span>Cari</span><input id="stok-q" value="${esc(G.ui.sq||'')}" placeholder="nama atau SKU"></label></div>
-  <label class="field"><span>Brand</span><select id="stok-brand"><option value="">Semua</option>${G.brands.map(b=>`<option value="${b.code}" ${br===b.code?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div>
-  <section class="panel"><p class="small muted" style="margin:0 0 8px">Klik baris produk untuk melihat rincian stok per ED dan riwayat masuk/keluarnya.</p><div class="tbl"><table><thead><tr><th>Produk</th><th class="n">Stok</th><th class="n">Bisa dijual</th><th>Rincian per ED</th>${seeCost()?'<th class="n">Nilai HPP</th>':''}</tr></thead><tbody>
-  ${list.map(r=>{const ls=lots.filter(l=>l.sku===r.sku);return `<tr data-act="stok-detail" data-sku="${r.sku}" style="cursor:pointer" title="Klik untuk rincian & riwayat"><td><b>${esc(r.name)}</b><div class="small muted code">${r.sku} · ${esc(r.brand_name)}</div></td><td class="n qty">${q(r.qty)}${r.below_min?'<div><span class="badge b-warn">di bawah minimum</span></div>':''}</td><td class="n">${q(r.sellable)}</td><td>${r.track_ed?(ls.map(l=>`<div class="row small" style="gap:6px;margin-bottom:4px"><b>${q(l.qty)}</b>${edBadge(l.ed,l.ed_status)}</div>`).join('')||'<span class="small muted">kosong</span>'):'<span class="small muted">Tanpa ED</span>'}</td>${seeCost()?`<td class="n">${rp(r.value)}</td>`:''}</tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Tidak ada produk yang cocok.</div></td></tr>'}
+  <label class="field"><span>Brand</span><select id="stok-brand"><option value="">Semua</option>${G.brands.map(b=>`<option value="${b.code}" ${br===b.code?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
+  <label class="field"><span>Urutkan</span><select id="stok-sort">${STOK_SORTS.filter(s=>seeCost()||!s[0].startsWith('value')).map(s=>`<option value="${s[0]}" ${sort===s[0]?'selected':''}>${s[1]}</option>`).join('')}</select></label>
+  <label class="field"><span>ED dalam</span><select id="stok-ed"><option value="">Semua ED</option>${[30,60,90,180,365].map(n=>`<option value="${n}" ${edN===n?'selected':''}>≤ ${n} hari lagi</option>`).join('')}</select></label></div>
+  <div class="chips" role="group" aria-label="Filter stok">${filters.map(x=>`<button type="button" class="chip stokchip" id="sf-${x[0]||'all'}" data-act="stok-filter" data-k="${x[0]}" aria-pressed="${cur[0]===x[0]}">${x[1]} <b>${q(base.filter(r=>x[2](r,lotsOf(r))).length)}</b></button>`).join('')}${anyF?'<button type="button" class="btn ghost sm" data-act="stok-reset">Reset filter</button>':''}</div>
+  <section class="panel"><p class="small muted" style="margin:0 0 8px">Menampilkan <b>${q(list.length)}</b> dari ${q(rows.length)} produk. Klik judul kolom untuk mengurutkan. Klik baris produk untuk melihat rincian stok per ED dan riwayat masuk/keluarnya.</p><div class="tbl"><table><thead><tr>${th('name','Produk')}${th('qty','Stok',1)}${th('sell','Bisa dijual',1)}${th('ed','Rincian per ED')}${seeCost()?th('value','Nilai HPP',1):''}</tr></thead><tbody>
+  ${list.map(r=>{const ls=lotsOf(r);return `<tr data-act="stok-detail" data-sku="${r.sku}" style="cursor:pointer" title="Klik untuk rincian & riwayat"><td><b>${esc(r.name)}</b><div class="small muted code">${r.sku} · ${esc(r.brand_name)}</div></td><td class="n qty">${q(r.qty)}${r.below_min?'<div><span class="badge b-warn">di bawah minimum</span></div>':''}</td><td class="n">${q(r.sellable)}</td><td>${r.track_ed?(ls.map(l=>`<div class="row small" style="gap:6px;margin-bottom:4px"><b>${q(l.qty)}</b>${edBadge(l.ed,l.ed_status)}</div>`).join('')||'<span class="small muted">kosong</span>'):'<span class="small muted">Tanpa ED</span>'}</td>${seeCost()?`<td class="n">${rp(r.value)}</td>`:''}</tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Tidak ada produk yang cocok.</div></td></tr>'}
   </tbody></table></div><p class="small muted">"Bisa dijual" = stok yang belum kedaluwarsa.</p></section>`; };
 
 /* ---------------- STOCK OPNAME ---------------- */
@@ -1083,6 +1105,9 @@ async function openProdDetail(sku){
 }
 A.more=d=>{ G.ui[d.k]=(G.ui[d.k]||1)+1; renderView(); };
 A.scan=d=>{ inSync(); outSync(); bdSync(); openScanner('Scan barang',p=>{ G.ui[d.target]=p.sku+' — '+p.name; banner('ok','DIKENALI',p.name); renderView().then(()=>{ const n=d.target==='in-sku'?(p.track_ed?'#in-ed':'#in-qty'):d.target==='bd-sku'?'#bd-qty':'#out-qty'; $(n)?.focus(); }); },false,d.target==='out-sku'); };
+A['stok-sort']=d=>{ const [k,dir]=(G.ui.sSort||'').split(':'), first=STOK_DIR[d.k]; G.ui.sSort=d.k+':'+(k===d.k?(dir==='asc'?'desc':'asc'):first); G.ui.stokKeep=true; renderView(); };
+A['stok-filter']=d=>{ G.ui.sF=d.k; G.ui.stokKeep=true; renderView(); };
+A['stok-reset']=()=>{ G.ui.sF=G.ui.sSort=G.ui.sEd=G.ui.sq=G.ui.sb=''; clearTimeout(G.ui.sqT); renderView(); };
 A['scan-stok']=()=>openScanner('Cari produk',p=>{ G.ui.sq=p.sku; renderView(); });
 A['sc-close']=closeScanner; A['sc-bg']=(d,e)=>{ if(e.target.classList.contains('sheet-bg')) closeScanner(); }; A['sc-live']=()=>startLive();
 /* masuk */
@@ -1342,6 +1367,8 @@ document.addEventListener('change',async e=>{ const t=e.target, id=t.id; liveSyn
   if(id==='in-photo'&&t.files[0]){ try{ inSync(); G.ui.inD.photo=await shrink(t.files[0],1000,'image/jpeg',.6); renderView(); banner('ok','FOTO DILAMPIRKAN',''); }catch(err){ banner('bad','FOTO GAGAL',errMsg(err)); } }
   if(id==='sc-photo'&&t.files[0]) decodePhoto(t.files[0]);
   if(id==='stok-brand'){ G.ui.sb=t.value; renderView(); }
+  if(id==='stok-sort'){ G.ui.sSort=t.value; G.ui.stokKeep=true; renderView(); }
+  if(id==='stok-ed'){ G.ui.sEd=t.value; G.ui.stokKeep=true; renderView(); }
   if(id==='k-from'||id==='k-to'||id==='k-sku'){ G.ui.kFrom=$('#k-from').value; G.ui.kTo=$('#k-to').value; G.ui.kSku=$('#k-sku').value; G.ui.kPage=1; renderView(); }
   if(id==='ex-k'){ G.ui.exk=t.value; renderView(); }
   if(id==='ex-from'||id==='ex-to'){ G.ui.exFrom=$('#ex-from').value; G.ui.exTo=$('#ex-to').value; }
