@@ -519,10 +519,6 @@ V.home=async()=>{
     <button class="tile" data-act="go" data-v="so"><b>Cek mingguan</b><small>Hitung stok fisik minggu ini</small>${soB}</button>
     <button class="tile" data-act="go" data-v="stok"><b>Stok & ED</b><small>Cari barang, jumlah & ED</small></button></div>`:'';
   return `<div class="row between"><h1>${{owner:'Dashboard Owner',ops:'Dashboard Head Operasional',staf:'Dashboard Staf Gudang',sales:'Dashboard Sales / Marketplace',finance:'Dashboard Finance'}[role()]}</h1><button class="btn sm" data-act="go" data-v="home">Muat ulang</button></div>
-  ${trackerBox}
-  ${is('staf')?overview+tiles:tiles+stokTbl}
-  ${is('owner','finance','staf')?excelPanel(true):''}
-  ${is('sales')?(()=>{ G.ui.stockMap={}; all.forEach(l=>{ if(l.ed_status!=='kedaluwarsa') G.ui.stockMap[l.sku]=num(G.ui.stockMap[l.sku])+num(l.qty); }); return bundleSection(); })():''}
   <div class="stats">
    <button class="stat" data-act="stat" data-k="in_today"><span>Masuk hari ini</span><b>${q(d.in_today)} pcs</b><small>Lihat rincian ›</small></button>
    <button class="stat" data-act="stat" data-k="out_today"><span>Keluar hari ini</span><b>${q(d.out_today)} pcs</b><small>Lihat rincian ›</small></button>
@@ -530,6 +526,10 @@ V.home=async()=>{
    <button class="stat" data-act="stat" data-k="total"><span>Total stok</span><b>${q(d.total_qty)} pcs</b><small>Lihat rincian ›</small></button>
    ${seeCost()?`<button class="stat" data-act="stat" data-k="value"><span>Nilai stok (HPP)</span><b>${rp(d.stock_value)}</b><small>Lihat rincian ›</small></button><button class="stat" data-act="stat" data-k="risk"><span>Nilai berisiko ED</span><b style="color:var(--bad)">${rp(d.risk_value)}</b><small>Lihat rincian ›</small></button>`:`<button class="stat" data-act="stat" data-k="risk"><span>Kedaluwarsa / ED dekat</span><b>${q(d.expired_qty)} / ${q(d.near_qty)}</b><small>Lihat rincian ›</small></button>`}
   </div>
+  ${trackerBox}
+  ${is('staf')?overview+tiles:tiles+stokTbl}
+  ${is('owner','finance','staf')?excelPanel(true):''}
+  ${is('sales')?(()=>{ G.ui.stockMap={}; all.forEach(l=>{ if(l.ed_status!=='kedaluwarsa') G.ui.stockMap[l.sku]=num(G.ui.stockMap[l.sku])+num(l.qty); }); return bundleSection(); })():''}
   ${todo.length?`<section class="panel"><h2>Perlu dikerjakan</h2><div class="tbl"><table><tbody>${todo.map(t=>`<tr><td><b>${esc(t[1])}</b><div class="small muted">${esc(t[2])}</div></td><td class="n"><button class="btn sm" data-act="go" data-v="${t[0]}">Buka</button></td></tr>`).join('')}</tbody></table></div></section>`:''}
   <section class="panel"><h2>Pantauan ED (≤ ${G.settings?.warn_months||6} bulan)</h2>${lots.length?`<div class="tbl"><table><thead><tr><th>Produk</th><th>ED</th><th class="n">Qty</th>${seeCost()?'<th class="n">Nilai</th>':''}<th>Tindakan</th></tr></thead><tbody>
    ${lots.map(l=>`<tr><td><b>${esc(l.name)}</b><div class="small muted code">${l.sku}</div></td><td>${edBadge(l.ed,l.ed_status)}</td><td class="n qty">${q(l.qty)}</td>${seeCost()?`<td class="n">${rp(l.value)}</td>`:''}<td class="small">${l.ed_status==='kedaluwarsa'?'Pisahkan, keluarkan sebagai "Rusak"':l.days_left<=90?'Habiskan segera (promo/bundling)':'Keluar lebih dulu (otomatis)'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Tidak ada produk kedaluwarsa atau mendekati ED.</div>'}</section>
@@ -826,8 +826,8 @@ V.stok=async()=>{ const [rows,lots]=await Promise.all([sel('v_stock',x=>x.eq('ac
   return `<div class="row between"><h1>Stok & ED</h1>${seeCost()?`<div class="hppbox"><small>${esc(hppLbl)}</small><b>${rp(list.reduce((a,r)=>a+num(r.value),0))}</b></div>`:`<div class="hppbox"><small>${esc(brandName)}</small><b>${q(list.reduce((a,r)=>a+num(r.qty),0))} pcs</b></div>`}</div>
   <div class="grid"><div class="skuin"><label class="field"><span>Cari</span><input id="stok-q" value="${esc(G.ui.sq||'')}" placeholder="nama atau SKU"></label></div>
   <label class="field"><span>Brand</span><select id="stok-brand"><option value="">Semua</option>${G.brands.map(b=>`<option value="${b.code}" ${br===b.code?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div>
-  <section class="panel"><div class="tbl"><table><thead><tr><th>Produk</th><th class="n">Stok</th><th class="n">Bisa dijual</th><th>Rincian per ED</th>${seeCost()?'<th class="n">Nilai HPP</th>':''}</tr></thead><tbody>
-  ${list.map(r=>{const ls=lots.filter(l=>l.sku===r.sku);return `<tr><td><b>${esc(r.name)}</b><div class="small muted code">${r.sku} · ${esc(r.brand_name)}</div></td><td class="n qty">${q(r.qty)}${r.below_min?'<div><span class="badge b-warn">di bawah minimum</span></div>':''}</td><td class="n">${q(r.sellable)}</td><td>${r.track_ed?(ls.map(l=>`<div class="row small" style="gap:6px;margin-bottom:4px"><b>${q(l.qty)}</b>${edBadge(l.ed,l.ed_status)}</div>`).join('')||'<span class="small muted">kosong</span>'):'<span class="small muted">Tanpa ED</span>'}</td>${seeCost()?`<td class="n">${rp(r.value)}</td>`:''}</tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Tidak ada produk yang cocok.</div></td></tr>'}
+  <section class="panel"><p class="small muted" style="margin:0 0 8px">Klik baris produk untuk melihat rincian stok per ED dan riwayat masuk/keluarnya.</p><div class="tbl"><table><thead><tr><th>Produk</th><th class="n">Stok</th><th class="n">Bisa dijual</th><th>Rincian per ED</th>${seeCost()?'<th class="n">Nilai HPP</th>':''}</tr></thead><tbody>
+  ${list.map(r=>{const ls=lots.filter(l=>l.sku===r.sku);return `<tr data-act="stok-detail" data-sku="${r.sku}" style="cursor:pointer" title="Klik untuk rincian & riwayat"><td><b>${esc(r.name)}</b><div class="small muted code">${r.sku} · ${esc(r.brand_name)}</div></td><td class="n qty">${q(r.qty)}${r.below_min?'<div><span class="badge b-warn">di bawah minimum</span></div>':''}</td><td class="n">${q(r.sellable)}</td><td>${r.track_ed?(ls.map(l=>`<div class="row small" style="gap:6px;margin-bottom:4px"><b>${q(l.qty)}</b>${edBadge(l.ed,l.ed_status)}</div>`).join('')||'<span class="small muted">kosong</span>'):'<span class="small muted">Tanpa ED</span>'}</td>${seeCost()?`<td class="n">${rp(r.value)}</td>`:''}</tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Tidak ada produk yang cocok.</div></td></tr>'}
   </tbody></table></div><p class="small muted">"Bisa dijual" = stok yang belum kedaluwarsa.</p></section>`; };
 
 /* ---------------- STOCK OPNAME ---------------- */
@@ -1053,6 +1053,34 @@ A['cfg-save']=()=>{ const url=$('#cf-url').value.trim(), key=$('#cf-key').value.
 A.authtab=d=>{ G.ui.authTab=d.t; renderAuth(); };
 A.go=d=>{ G.view=d.v; G.ui.soDetail=null; render(); try{scrollTo(0,0)}catch(e){} };
 A.crm=()=>{ try{ const w=window.open('./crm.html','_blank','noopener'); if(!w) location.href='./crm.html'; }catch(e){ location.href='./crm.html'; } };
+A['stok-detail']=d=>openProdDetail(d.sku);
+async function openProdDetail(sku){
+  $('#overlay').innerHTML='<div class="sheet-bg" data-act="sc-bg"><div class="sheet" role="dialog" aria-label="Rincian produk"><div class="empty">Memuat rincian…</div></div></div>';
+  try{
+    const [st,ls,mv]=await Promise.all([ sel('v_stock',x=>x.eq('sku',sku)), sel('v_lots',x=>x.eq('sku',sku).order('ed')), sel('v_moves',x=>x.eq('sku',sku).order('at',{ascending:false}).limit(80)) ]);
+    const p=st[0]||{sku,name:sku,qty:0,sellable:0,value:0,track_ed:false,brand_name:''};
+    const KIND={masuk:'Masuk',keluar:'Keluar',so:'Stock opname'};
+    const edRows = p.track_ed
+      ? (ls.length?ls.map(l=>`<div class="row between" style="padding:7px 2px;border-bottom:1px solid var(--line)"><span>${edBadge(l.ed,l.ed_status)}</span><span class="row" style="gap:14px;align-items:center"><b class="qty">${q(l.qty)} pcs</b>${seeCost()?`<span class="small muted">${rp(l.value)}</span>`:''}</span></div>`).join('')
+         : '<div class="empty">Stok kosong.</div>')
+      : '<div class="small muted">Produk ini tidak memakai tanggal ED.</div>';
+    const mvRows = mv.length?mv.map(m=>`<tr><td class="small">${ftime(m.at)}</td><td class="small">${KIND[m.kind]||esc(m.kind)}</td><td class="code small">${esc(m.doc_no)}</td><td class="small">${m.ed?fdate(m.ed):'–'}</td><td class="n qty" style="color:${num(m.qty)<0?'var(--bad)':'var(--ok)'}">${num(m.qty)>0?'+':''}${q(m.qty)}</td><td class="small">${esc(m.note||'')}</td><td class="small">${esc(m.by_name||'')}</td></tr>`).join('')
+      : '<tr><td colspan="7"><div class="empty">Belum ada pergerakan.</div></td></tr>';
+    $('#overlay').innerHTML=`<div class="sheet-bg" data-act="sc-bg"><div class="sheet" role="dialog" aria-label="Rincian produk" style="max-width:720px;width:100%">
+      <div class="row between"><div><h3 style="margin:0">${esc(p.name)}</h3><div class="small muted code">${esc(p.sku)} · ${esc(p.brand_name||'')}</div></div><button class="btn ghost" data-act="sc-close">Tutup</button></div>
+      <div class="stats" style="margin:12px 0">
+        <div class="stat"><span>Stok</span><b>${q(p.qty)} pcs</b></div>
+        <div class="stat"><span>Bisa dijual</span><b>${q(p.sellable)} pcs</b></div>
+        ${seeCost()?`<div class="stat"><span>Nilai HPP</span><b>${rp(p.value)}</b></div>`:''}
+        ${p.below_min?'<div class="stat"><span>Status</span><b style="color:var(--warn)">Di bawah minimum</b></div>':''}
+      </div>
+      <h4 style="margin:16px 0 6px">Stok per tanggal ED</h4>${edRows}
+      <h4 style="margin:20px 0 6px">Riwayat masuk / keluar</h4>
+      <div class="tbl" style="max-height:40vh;overflow:auto"><table><thead><tr><th>Waktu</th><th>Jenis</th><th>Dokumen</th><th>ED</th><th class="n">Qty</th><th>Keterangan</th><th>Oleh</th></tr></thead><tbody>${mvRows}</tbody></table></div>
+      ${mv.length>=80?'<p class="small muted" style="margin-top:8px">Menampilkan 80 pergerakan terbaru — selengkapnya di menu Riwayat stok.</p>':''}
+    </div></div>`;
+  }catch(err){ $('#overlay').innerHTML=`<div class="sheet-bg" data-act="sc-bg"><div class="sheet"><div class="row between"><h3 style="margin:0">Gagal memuat</h3><button class="btn ghost" data-act="sc-close">Tutup</button></div><p>${esc(errMsg(err))}</p></div></div>`; }
+}
 A.more=d=>{ G.ui[d.k]=(G.ui[d.k]||1)+1; renderView(); };
 A.scan=d=>{ inSync(); outSync(); bdSync(); openScanner('Scan barang',p=>{ G.ui[d.target]=p.sku+' — '+p.name; banner('ok','DIKENALI',p.name); renderView().then(()=>{ const n=d.target==='in-sku'?(p.track_ed?'#in-ed':'#in-qty'):d.target==='bd-sku'?'#bd-qty':'#out-qty'; $(n)?.focus(); }); },false,d.target==='out-sku'); };
 A['scan-stok']=()=>openScanner('Cari produk',p=>{ G.ui.sq=p.sku; renderView(); });
